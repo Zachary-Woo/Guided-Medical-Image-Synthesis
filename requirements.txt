@@ -3,7 +3,12 @@ torchvision>=0.15.0
 diffusers>=0.21.0
 transformers>=4.30.0
 accelerate>=0.22.0
-xformers>=0.0.20
+# NOTE: xformers installation might fail if torch is not installed beforehand.
+# If setup fails, try: pip install torch torchvision diffusers transformers accelerate
+# Then try: pip install xformers==<specific_version_wheel_for_your_python_and_cuda>
+# Then run: pip install -r requirements.txt
+# If xformers still fails, comment out the line below and the xformers code in src/utils/pipeline_utils.py
+# xformers>=0.0.20
 numpy>=1.24.0
 pillow>=10.0.0
 matplotlib>=3.7.0

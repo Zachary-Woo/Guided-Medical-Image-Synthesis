@@ -54,14 +54,15 @@ def load_sd_controlnet_pipeline(
         logging.info("Enabling model CPU offload for memory saving.")
         pipeline.enable_model_cpu_offload() # More aggressive than attention slicing
 
-        if hasattr(pipeline, "enable_xformers_memory_efficient_attention"):
-            try:
-                pipeline.enable_xformers_memory_efficient_attention()
-                logging.info("Enabled xFormers memory efficient attention.")
-            except ImportError:
-                logging.warning("xFormers not installed. Cannot enable memory efficient attention.")
-            except Exception as e:
-                 logging.warning(f"Could not enable xFormers: {e}")
+        # Commented out xformers section as it can cause installation issues
+        # if hasattr(pipeline, "enable_xformers_memory_efficient_attention"):
+        #     try:
+        #         pipeline.enable_xformers_memory_efficient_attention()
+        #         logging.info("Enabled xFormers memory efficient attention.")
+        #     except ImportError:
+        #         logging.warning("xFormers not installed. Cannot enable memory efficient attention.")
+        #     except Exception as e:
+        #          logging.warning(f"Could not enable xFormers: {e}")
 
         # Note: enable_model_cpu_offload() handles moving to device, so pipeline.to(device) might be redundant/harmful
         # pipeline.to(device)
