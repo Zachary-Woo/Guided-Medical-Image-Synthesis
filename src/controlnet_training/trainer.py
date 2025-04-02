@@ -201,39 +201,4 @@ class ControlNetTrainer:
         unwrapped_controlnet = self.accelerator.unwrap_model(self.controlnet)
         unwrapped_controlnet.save_pretrained(checkpoint_dir)
         
-        print(f"Saved checkpoint to {checkpoint_dir}")
-    
-    def generate(self, prompt, control_image, num_inference_steps=50, guidance_scale=7.5):
-        """
-        Generate an image using the trained ControlNet.
-        
-        Args:
-            prompt (str): Text prompt for generation
-            control_image (torch.Tensor): Control image
-            num_inference_steps (int): Number of inference steps
-            guidance_scale (float): Guidance scale for classifier-free guidance
-            
-        Returns:
-            PIL.Image: Generated image
-        """
-        from diffusers import StableDiffusionControlNetPipeline
-        
-        # Create pipeline for inference
-        pipeline = StableDiffusionControlNetPipeline.from_pretrained(
-            "runwayml/stable-diffusion-v1-5",
-            controlnet=self.accelerator.unwrap_model(self.controlnet),
-            torch_dtype=torch.float16
-        ).to(self.device)
-        
-        # Enable attention slicing for lower memory usage
-        pipeline.enable_attention_slicing()
-        
-        # Generate image
-        image = pipeline(
-            prompt,
-            control_image,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale
-        ).images[0]
-        
-        return image 
+        print(f"Saved checkpoint to {checkpoint_dir}") 

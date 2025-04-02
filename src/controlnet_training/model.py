@@ -65,28 +65,6 @@ def setup_controlnet(pretrained_model_id="runwayml/stable-diffusion-v1-5",
     }
 
 
-def setup_pipeline(pretrained_model_id, controlnet_model):
-    """
-    Set up a ControlNet pipeline for inference.
-    
-    Args:
-        pretrained_model_id (str): ID of the pretrained Stable Diffusion model
-        controlnet_model (ControlNetModel): Trained ControlNet model
-        
-    Returns:
-        StableDiffusionControlNetPipeline: The pipeline for generation
-    """
-    # Create pipeline for inference
-    pipeline = StableDiffusionControlNetPipeline.from_pretrained(
-        pretrained_model_id,
-        controlnet=controlnet_model,
-        safety_checker=None,  # Remove safety checker for medical images
-        torch_dtype=torch.float16
-    )
-    
-    return pipeline
-
-
 def freeze_model_components(model_components, controlnet_trainable_modules=None):
     """
     Freeze model components for efficient training.

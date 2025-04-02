@@ -11,6 +11,8 @@ from monai.networks.nets import UNet
 from monai.losses import DiceLoss
 from monai.metrics import DiceMetric
 from tqdm import tqdm
+import os # Import os for path joining
+import logging # Import logging for logging messages
 
 
 class SegmentationEvaluator:
@@ -62,7 +64,7 @@ class SegmentationEvaluator:
         self.criterion = DiceLoss(sigmoid=True)
         self.metric = DiceMetric(include_background=False, reduction="mean")
     
-    def train(self, train_dataloader, val_dataloader=None, num_epochs=100):
+    def train(self, train_dataloader, val_dataloader=None, num_epochs=100, save_path="best_segmentation_model.pth"):
         """
         Train the segmentation model.
         
@@ -70,6 +72,7 @@ class SegmentationEvaluator:
             train_dataloader (DataLoader): Training dataloader
             val_dataloader (DataLoader, optional): Validation dataloader
             num_epochs (int): Number of epochs to train for
+            save_path (str): Path to save the best model
             
         Returns:
             dict: Dictionary with training metrics
@@ -112,7 +115,9 @@ class SegmentationEvaluator:
                 if val_dice > best_val_dice:
                     best_val_dice = val_dice
                     # Save best model
-                    torch.save(self.model.state_dict(), "best_segmentation_model.pth")
+                    logging.info(f"Saving best model to {save_path} (Val Dice: {best_val_dice:.4f})")
+                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                    torch.save(self.model.state_dict(), save_path)
             else:
                 print(f"Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss/len(train_dataloader):.4f}")
         
@@ -189,7 +194,7 @@ class ClassificationEvaluator:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
         self.criterion = nn.CrossEntropyLoss()
     
-    def train(self, train_dataloader, val_dataloader=None, num_epochs=100):
+    def train(self, train_dataloader, val_dataloader=None, num_epochs=100, save_path="best_classification_model.pth"):
         """
         Train the classification model.
         
@@ -197,6 +202,7 @@ class ClassificationEvaluator:
             train_dataloader (DataLoader): Training dataloader
             val_dataloader (DataLoader, optional): Validation dataloader
             num_epochs (int): Number of epochs to train for
+            save_path (str): Path to save the best model
             
         Returns:
             dict: Dictionary with training metrics
@@ -239,7 +245,9 @@ class ClassificationEvaluator:
                 if val_acc > best_val_acc:
                     best_val_acc = val_acc
                     # Save best model
-                    torch.save(self.model.state_dict(), "best_classification_model.pth")
+                    logging.info(f"Saving best model to {save_path} (Val Acc: {best_val_acc:.4f})")
+                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                    torch.save(self.model.state_dict(), save_path)
             else:
                 print(f"Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss/len(train_dataloader):.4f}")
         

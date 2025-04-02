@@ -47,7 +47,9 @@ class TrainingConfig:
     """
     output_dir: str = "output"
     learning_rate: float = 1e-5
+    downstream_learning_rate: float = 1e-4
     num_epochs: int = 100
+    downstream_num_epochs: int = 20
     save_steps: int = 500
     eval_steps: int = 100
     gradient_accumulation_steps: int = 1
@@ -62,9 +64,11 @@ class InferenceConfig:
     """
     Inference configuration.
     """
+    controlnet_inference_id: str = "lllyasviel/sd-controlnet-canny"
     num_inference_steps: int = 50
     guidance_scale: float = 7.5
     num_images_per_prompt: int = 1
+    conditioning_type: str = "canny"
     prompts: List[str] = field(default_factory=lambda: [
         "A high-quality MRI scan of the brain showing a tumor",
         "A clear histopathology image showing cancer cells",

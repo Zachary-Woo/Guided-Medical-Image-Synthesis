@@ -1,0 +1,57 @@
+# Configuration for MedMNIST PathMNIST Demo with Canny ControlNet
+
+data:
+  dataset_name: PathMNIST
+  # Set this to the actual path where you download/unzip PathMNIST
+  data_dir: ./data/pathmnist
+  image_size: 128  # Smaller size for faster demo
+  batch_size: 16   # Batch size for downstream evaluation training
+  num_workers: 4
+  mask_folder: null # PathMNIST is classification, no masks needed
+  augment_data: false # Keep augmentation off for downstream eval simplicity?
+  val_split: 0.2    # Validation split for downstream eval
+  test_split: 0.2   # Test split for downstream eval
+
+model:
+  pretrained_model_id: runwayml/stable-diffusion-v1-5
+  controlnet_id: null # Using pre-trained one below for inference
+  use_lora: false
+  lora_rank: 4
+  trainable_modules: [] # Not training ControlNet in this demo
+  mixed_precision: fp16
+
+training:
+  output_dir: output/pathmnist_canny_demo # Base output, generation/eval will use subdirs
+  learning_rate: 1e-5 # Base LR if we were training ControlNet
+  downstream_learning_rate: 1e-4 # LR for the downstream classifier
+  num_epochs: 20      # Epochs for downstream evaluation training
+  save_steps: 1000    # Steps for saving ControlNet checkpoints (if training)
+  eval_steps: 500     # Steps for evaluating ControlNet (if training)
+  gradient_accumulation_steps: 1
+  seed: 42
+  log_wandb: false
+  wandb_project: medical-controlnet-demo
+  wandb_run_name: pathmnist-canny-demo
+
+inference:
+  controlnet_inference_id: lllyasviel/sd-controlnet-canny
+  conditioning_type: canny
+  num_inference_steps: 30 # Faster inference for demo
+  guidance_scale: 7.0
+  num_images_per_prompt: 1
+  # Example prompts relevant to PathMNIST (Colorectal Cancer histology)
+  prompts:
+    - "High-resolution histopathology slide showing colon tissue"
+    - "Microscopic view of normal colorectal glands"
+    - "Histology image of adipose tissue near colon section"
+    - "Colorectal cancer cells, H&E stain"
+    - "Pathology slide: adenocarcinoma in colon tissue"
+    - "Lymphatic tissue in colorectal histology"
+    - "Muscularis propria layer, colon histology"
+    - "Well-differentiated colorectal carcinoma histology"
+
+# Note: You'll need to download the PathMNIST dataset (e.g., from https://medmnist.com/)
+# and place it in the directory specified in `data.data_dir`.
+# The dataset might come as .npz files, you may need to convert them to an ImageFolder structure
+# (e.g., data/pathmnist/class_0/img1.png, data/pathmnist/class_1/img2.png, ...)
+# for the classification evaluation script to work easily. 
