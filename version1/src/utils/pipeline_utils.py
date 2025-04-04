@@ -7,6 +7,7 @@ from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCM
 import logging
 import os
 import gc
+import traceback
 from huggingface_hub import scan_cache_dir, HfFolder
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 

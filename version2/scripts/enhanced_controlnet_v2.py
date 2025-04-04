@@ -41,9 +41,21 @@ try:
     
     # Try to import MultiControlNetModel, but don't fail if it's not available
     try:
-        from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_controlnet import MultiControlNetModel
-    except ImportError:
-        logger.warning("MultiControlNetModel not available in your diffusers version. Multi-ControlNet features will be disabled.")
+        MultiControlNetModel = None
+        # Try different import paths for MultiControlNetModel
+        try:
+            from diffusers import MultiControlNetModel
+        except (ImportError, ModuleNotFoundError):
+            try:
+                from diffusers.models import MultiControlNetModel
+            except (ImportError, ModuleNotFoundError):
+                try:
+                    from diffusers.pipelines.stable_diffusion import MultiControlNetModel
+                except (ImportError, ModuleNotFoundError):
+                    logger.warning("MultiControlNetModel not available in your diffusers version. Multi-ControlNet features will be disabled.")
+    except Exception as e:
+        logger.warning(f"Error importing MultiControlNetModel: {e}")
+        logger.warning("Multi-ControlNet features will be disabled.")
         MultiControlNetModel = None
 except ImportError as e:
     print(f"Error importing diffusers: {e}")
@@ -204,11 +216,40 @@ def create_enhanced_edge_map(image_path, low_threshold=30, high_threshold=120, t
     if use_stain_norm and stain_method.lower() != "none":
         logger.info(f"Applying {stain_method} stain normalization")
         try:
-            normalized_np = normalize_histopathology_image(
-                resized_np, 
-                reference_image=reference_image,
-                method=stain_method
-            )
+            # Create a direct visualization of the stain normalization effect
+            if save_intermediates and save_dir:
+                # Generate visualization comparing original vs normalized
+                comparison_img = visualize_normalization(
+                    resized_np, 
+                    reference_image=reference_image,
+                    method=stain_method
+                )
+                # Save the comparison visualization
+                comparison_path = save_dir / "stain_normalization_comparison.png"
+                Image.fromarray(comparison_img).save(comparison_path)
+                logger.info(f"Saved stain normalization comparison to {comparison_path}")
+            
+            # Initialize the appropriate normalizer
+            if stain_method.lower() == "macenko":
+                normalizer = MacenkoNormalizer()
+            elif stain_method.lower() == "reinhard":
+                normalizer = ReinhardNormalizer()
+            else:
+                # Fall back to function-based normalization for other methods
+                normalized_np = normalize_histopathology_image(
+                    resized_np, 
+                    reference_image=reference_image,
+                    method=stain_method
+                )
+                
+            # Use the normalizer directly if initialized
+            if stain_method.lower() in ["macenko", "reinhard"]:
+                if reference_image is not None:
+                    # Fit the normalizer to the reference image
+                    normalizer.fit(reference_image)
+                # Transform the target image
+                normalized_np = normalizer.transform(resized_np)
+            
             # Save intermediate normalized image if requested
             if save_intermediates and save_dir:
                 normalized_img = Image.fromarray(normalized_np)
@@ -274,16 +315,8 @@ def create_enhanced_edge_map(image_path, low_threshold=30, high_threshold=120, t
     
     return canny_image, resized_image, normalized_image
 
-def setup_controlnet_pipeline(args):
-    """
-    Set up an optimized ControlNet pipeline for medical imaging.
-    
-    Args:
-        args: Command line arguments
-        
-    Returns:
-        Configured pipeline
-    """
+def setup_multicontrolnet_pipeline(args):
+    """Set up a pipeline with multiple ControlNet models"""
     # Check for GPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
@@ -291,17 +324,24 @@ def setup_controlnet_pipeline(args):
     # Set up parameters
     torch_dtype = torch.float16 if device == "cuda" else torch.float32
     
-    # Load ControlNet
-    logger.info(f"Loading ControlNet model: {args.controlnet_model}")
-    controlnet = ControlNetModel.from_pretrained(
-        args.controlnet_model, 
+    # Load multiple ControlNet models
+    canny_controlnet = ControlNetModel.from_pretrained(
+        "lllyasviel/sd-controlnet-canny",
         torch_dtype=torch_dtype
     )
     
-    # Load base model
-    logger.info(f"Loading base model: {args.base_model}")
+    # Choose a second ControlNet (e.g., depth)
+    depth_controlnet = ControlNetModel.from_pretrained(
+        "lllyasviel/sd-controlnet-depth",
+        torch_dtype=torch_dtype
+    )
+    
+    # Combine into MultiControlNet
+    controlnet = MultiControlNetModel([canny_controlnet, depth_controlnet])
+    
+    # Load pipeline with multiple ControlNets
     pipeline = StableDiffusionControlNetPipeline.from_pretrained(
-        args.base_model, 
+        args.base_model,
         controlnet=controlnet,
         safety_checker=None,
         torch_dtype=torch_dtype
@@ -460,7 +500,7 @@ def main():
             logger.info(f"Saved normalized input image to {normalized_path}")
         
         # Set up pipeline
-        pipeline = setup_controlnet_pipeline(args)
+        pipeline = setup_multicontrolnet_pipeline(args)
         
         # Generate images
         logger.info(f"Generating {args.num_images} image(s) with {args.steps} steps, guidance scale {args.guidance_scale}")
@@ -489,7 +529,7 @@ def main():
             image = pipeline(
                 prompt=prompt,
                 negative_prompt=args.negative_prompt,
-                image=canny_image,
+                image=[canny_image, reference_image],
                 num_inference_steps=args.steps,
                 generator=generator,
                 guidance_scale=args.guidance_scale,
