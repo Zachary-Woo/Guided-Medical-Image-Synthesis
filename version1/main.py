@@ -50,26 +50,47 @@ def parse_args():
     generate_parser.add_argument("--guidance_scale", type=float, help="Override guidance scale in config")
     generate_parser.add_argument("--seed", type=int, help="Override random seed in config")
     generate_parser.add_argument("--batch_size", type=int, help="Override batch size (usually 1 for controlled generation)")
+    generate_parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     
     # Evaluate command
     evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate downstream task performance with/without synthetic data")
-    evaluate_parser.add_argument("--real_data_dir", type=str, required=True, 
-                               help="Directory with real training/test data (ImageFolder or custom structure)")
-    evaluate_parser.add_argument("--synthetic_data_dir", type=str, required=True, 
+    evaluate_parser.add_argument("--config", type=str, default="configs/medmnist_canny_demo.yaml",
+                               help="Path to config file (specifies dataset name, etc.)")
+    evaluate_parser.add_argument("--synthetic_data_dir", type=str, required=True,
                                help="Directory containing the generated synthetic images")
-    evaluate_parser.add_argument("--output_dir", type=str, default="evaluation_results",
+    evaluate_parser.add_argument("--output_dir", type=str, # Default now comes from config/logic in evaluate.py
                                help="Directory to save evaluation results (plots, logs, models)")
-    evaluate_parser.add_argument("--task", type=str, default="classification",
-                               choices=["segmentation", "classification"], 
-                               help="Downstream task to evaluate")
+    evaluate_parser.add_argument("--medmnist_download_dir", type=str, # Added arg to specify download location
+                               help="Root directory to download MedMNIST data (overrides default ./data in evaluate.py)")
+    evaluate_parser.add_argument("--task", type=str, # Default in evaluate.py
+                               choices=["segmentation", "classification"],
+                               help="Downstream task to evaluate (overrides config/default)")
     evaluate_parser.add_argument("--batch_size", type=int, help="Override evaluation batch size")
     evaluate_parser.add_argument("--num_epochs", type=int, help="Override evaluation training epochs")
     evaluate_parser.add_argument("--image_size", type=int, help="Override evaluation image size")
-    evaluate_parser.add_argument("--mask_folder", type=str, help="Subfolder for real masks (segmentation)")
+    evaluate_parser.add_argument("--learning_rate", type=float, help="Override downstream learning rate")
     evaluate_parser.add_argument("--synthetic_mask_folder", type=str, help="Subfolder for synthetic masks (segmentation)")
-    evaluate_parser.add_argument("--test_split", type=float, help="Override test split fraction for real data")
-    evaluate_parser.add_argument("--val_split", type=float, help="Override validation split fraction for real data")
     evaluate_parser.add_argument("--seed", type=int, help="Override evaluation random seed")
+    
+    # Extract command for samples
+    extract_parser = subparsers.add_parser("extract", help="Extract samples from MedMNIST dataset for conditioning")
+    extract_parser.add_argument("--npz_file", type=str, default="./data/pathmnist_128.npz",
+                              help="Path to the NPZ file to extract samples from")
+    extract_parser.add_argument("--output_dir", type=str, default="./data/pathmnist_samples",
+                              help="Output directory for extracted samples")
+    extract_parser.add_argument("--num_samples", type=int, default=8,
+                              help="Number of samples to extract")
+    extract_parser.add_argument("--image_key", type=str, default="train_images",
+                              help="Key for images in NPZ file")
+    
+    # Test command
+    test_parser = subparsers.add_parser("test", help="Test pipeline components without performing full generation")
+    test_parser.add_argument("--config", type=str, default="configs/medmnist_canny_demo.yaml",
+                           help="Path to configuration file")
+    test_parser.add_argument("--conditioning_image", type=str,
+                           help="Path to a test image for conditioning")
+    test_parser.add_argument("--verbose", action="store_true",
+                           help="Enable verbose logging")
     
     # Setup command
     setup_parser = subparsers.add_parser("setup", help="Install requirements (optional)")
@@ -84,8 +105,8 @@ def build_command(script_name: str, args_dict: dict) -> list:
     for key, value in args_dict.items():
         if value is None: # Skip None values
             continue
-        # Convert snake_case to --kebab-case
-        arg_name = "--" + key.replace("_", "-")
+        # Keep underscores for argument names to match argparse definitions
+        arg_name = "--" + key
         if isinstance(value, bool):
             if value:
                 cmd.append(arg_name)
@@ -134,7 +155,8 @@ def run_generate(args):
         "steps": args.steps,
         "guidance_scale": args.guidance_scale,
         "seed": args.seed,
-        "batch_size": args.batch_size
+        "batch_size": args.batch_size,
+        "debug": args.debug
     }
     cmd = build_command("generate.py", args_dict)
     print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
@@ -144,25 +166,60 @@ def run_generate(args):
 def run_evaluate(args):
     """
     Run evaluation script.
+
+    Args:
+        args (argparse.Namespace): Parsed arguments
+    """
+    args_dict = {
+        # Pass only the relevant args to evaluate.py
+        "config": args.config,
+        "synthetic_data_dir": args.synthetic_data_dir,
+        "output_dir": args.output_dir,
+        "medmnist_download_dir": args.medmnist_download_dir,
+        "task": args.task,
+        "batch_size": args.batch_size,
+        "num_epochs": args.num_epochs,
+        "image_size": args.image_size,
+        "learning_rate": args.learning_rate,
+        "synthetic_mask_folder": args.synthetic_mask_folder,
+        "seed": args.seed
+    }
+    cmd = build_command("evaluate.py", args_dict)
+    print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
+    subprocess.run(cmd, check=True)
+
+
+def run_extract(args):
+    """
+    Run sample extraction script.
     
     Args:
         args (argparse.Namespace): Parsed arguments
     """
     args_dict = {
-        "real_data_dir": args.real_data_dir,
-        "synthetic_data_dir": args.synthetic_data_dir,
+        "npz_file": args.npz_file,
         "output_dir": args.output_dir,
-        "task": args.task,
-        "batch_size": args.batch_size,
-        "num_epochs": args.num_epochs,
-        "image_size": args.image_size,
-        "mask_folder": args.mask_folder,
-        "synthetic_mask_folder": args.synthetic_mask_folder,
-        "test_split": args.test_split,
-        "val_split": args.val_split,
-        "seed": args.seed
+        "num_samples": args.num_samples,
+        "image_key": args.image_key
     }
-    cmd = build_command("evaluate.py", args_dict)
+    cmd = build_command("extract_medmnist_samples.py", args_dict)
+    print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
+    subprocess.run(cmd, check=True)
+
+
+def run_test(args):
+    """
+    Run pipeline testing script.
+    
+    Args:
+        args (argparse.Namespace): Parsed arguments
+    """
+    args_dict = {
+        "config": args.config,
+        "conditioning_image": args.conditioning_image,
+        "verbose": args.verbose
+    }
+    cmd = build_command("test_pipeline.py", args_dict)
     print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -202,6 +259,10 @@ def main():
             run_generate(args)
         elif args.command == "evaluate":
             run_evaluate(args)
+        elif args.command == "extract":
+            run_extract(args)
+        elif args.command == "test":
+            run_test(args)
         elif args.command == "setup":
             run_setup()
         # No else needed because subparsers are required

@@ -22,12 +22,13 @@ model:
 
 training:
   output_dir: output/pathmnist_canny_demo # Base output, generation/eval will use subdirs
-  learning_rate: 1e-5 # Base LR if we were training ControlNet
+  # learning_rate: 1e-5 # For ControlNet fine-tuning (unused)
   downstream_learning_rate: 1e-4 # LR for the downstream classifier
-  num_epochs: 20      # Epochs for downstream evaluation training
-  save_steps: 1000    # Steps for saving ControlNet checkpoints (if training)
-  eval_steps: 500     # Steps for evaluating ControlNet (if training)
-  gradient_accumulation_steps: 1
+  # num_epochs: 20      # For ControlNet fine-tuning (unused) - Renamed downstream specific one
+  downstream_num_epochs: 20 # Epochs for downstream evaluation training
+  # save_steps: 1000    # For ControlNet fine-tuning (unused)
+  # eval_steps: 500     # For ControlNet fine-tuning (unused)
+  # gradient_accumulation_steps: 1 # For ControlNet fine-tuning (unused)
   seed: 42
   log_wandb: false
   wandb_project: medical-controlnet-demo

@@ -128,24 +128,24 @@ class MedicalImageDataset(Dataset):
         if self.has_masks:
             if idx < len(self.mask_paths):
                  try:
-                    mask = Image.open(self.mask_paths[idx]).convert('L') # Load mask as grayscale
+                    mask = Image.open(self.mask_paths[idx]).convert('L')
                  except Exception as e:
                      logging.error(f"Error loading mask {self.mask_paths[idx]}: {e}")
-                     # Return dummy mask or raise error?
-                     mask_tensor = torch.zeros_like(image[0:1,:,:]) # Match spatial dims, single channel
+                     mask_tensor = torch.zeros_like(image[0:1,:,:])
                      return image, mask_tensor
 
                  if self.mask_transform:
                      mask = self.mask_transform(mask)
                  return image, mask
             else:
-                # This case should ideally not happen if counts match check is correct
                 logging.error(f"Mask path missing for index {idx} despite has_masks=True.")
                 mask_tensor = torch.zeros_like(image[0:1,:,:])
                 return image, mask_tensor
         else:
-            # Return only the image if no masks are expected
-            return image
+            # Return image and a dummy label if no masks are expected/found
+            # This ensures consistent output format (tuple) for ConcatDataset
+            dummy_label = torch.tensor(0, dtype=torch.long)
+            return image, dummy_label
 
 
 def get_dataloader(dataset, batch_size=32, shuffle=True, num_workers=4):

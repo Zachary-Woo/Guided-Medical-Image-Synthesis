@@ -1,0 +1,48 @@
+# Configuration file for evaluating histopathology image synthesis with MedMNIST
+
+data:
+  dataset_name: "pathmnist"
+  data_dir: "./data"
+  image_size: 224
+  batch_size: 16
+  num_workers: 4
+  mask_folder: null
+  augment_data: true
+  val_split: 0.1
+  test_split: 0.1
+
+model:
+  pretrained_model_id: "runwayml/stable-diffusion-v1-5"
+  controlnet_id: "lllyasviel/sd-controlnet-canny"
+  use_lora: false
+  lora_rank: 4
+  trainable_modules: ["down_blocks", "mid_block", "up_blocks"]
+  mixed_precision: "fp16"
+
+training:
+  output_dir: "output/evaluation_v2"
+  downstream_learning_rate: 1e-4
+  downstream_num_epochs: 20
+  seed: 42
+  log_wandb: false
+  wandb_project: "med-ai-evaluation"
+  wandb_run_name: null
+
+inference:
+  controlnet_inference_id: "lllyasviel/sd-controlnet-canny"
+  num_inference_steps: 50
+  guidance_scale: 7.5
+  num_images_per_prompt: 1
+  conditioning_type: "canny"
+  prompts: 
+    - "A high-quality histopathology image showing colorectal tissue with H&E staining"
+    - "A detailed pathology slide showing liver tissue cells with H&E staining"
+    - "A clear histopathology image of lung tissue with cellular detail, H&E stain"
+
+evaluation:
+  task: "classification"  # classification or segmentation
+  metrics_to_track: ["accuracy", "f1_score", "precision", "recall"]
+  generate_visualizations: true
+  compare_stain_normalization: true
+  normalization_methods: ["macenko", "reinhard"]
+  metadata_analysis: true 
