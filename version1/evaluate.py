@@ -11,13 +11,15 @@ import logging
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, ConcatDataset, Subset
+import traceback
+import json
 
-# Local imports
-from src.preprocessing.data_loader import MedicalImageDataset
-from src.preprocessing.transforms import MedicalImageTransforms
-from src.evaluation.downstream import train_and_evaluate_downstream
-from src.utils.visualization import plot_metrics, create_comparison_grid
-from src.utils.config import Config
+# Import project modules
+from version1.src.preprocessing.data_loader import MedicalImageDataset
+from version1.src.preprocessing.transforms import MedicalImageTransforms
+from version1.src.evaluation.downstream import train_and_evaluate_downstream
+from version1.src.utils.visualization import plot_metrics, create_comparison_grid
+from version1.src.utils.config import Config
 
 # External libraries
 from torchvision.datasets import ImageFolder
@@ -33,34 +35,35 @@ def parse_args():
     Returns:
         argparse.Namespace: Parsed arguments
     """
-    parser = argparse.ArgumentParser(description="Evaluate downstream tasks using synthetic medical images")
+    parser = argparse.ArgumentParser(description="Evaluate downstream task performance")
 
     # Removed real_data_dir, as medmnist downloads automatically or uses root
     # parser.add_argument("--real_data_dir", type=str, required=True, help="Directory with real data")
+    parser.add_argument("--config", type=str, default="version1/configs/medmnist_canny_demo.yaml",
+                        help="Path to config file (specifies dataset name, etc.)")
     parser.add_argument("--synthetic_data_dir", type=str, required=True,
-                        help="Directory with generated synthetic images (flat structure or ImageFolder compatible)")
-    parser.add_argument("--config", type=str, default="configs/medmnist_canny_demo.yaml",
-                        help="Path to configuration file (used for defaults and dataset name)")
+                        help="Directory containing the generated synthetic images")
     parser.add_argument("--output_dir", type=str,
-                        help="Output directory for evaluation results and logs (overrides config)")
+                        help="Directory to save evaluation results")
+    parser.add_argument("--medmnist_download_dir", type=str, default="./data",
+                        help="Root directory to download MedMNIST data")
     parser.add_argument("--task", type=str, default="classification",
                         choices=["segmentation", "classification"],
                         help="Downstream task to evaluate")
-    parser.add_argument("--batch_size", type=int, help="Batch size (overrides config)")
-    parser.add_argument("--num_epochs", type=int, help="Number of epochs for downstream training (overrides config)")
-    parser.add_argument("--image_size", type=int, help="Image size (overrides config)")
-    parser.add_argument("--learning_rate", type=float, help="Learning rate for downstream model (overrides config)")
-    # Removed mask_folder args, medmnist handles internal structure
-    # parser.add_argument("--mask_folder", type=str, default="masks",
-    #                     help="Subfolder name containing masks within real_data_dir (for segmentation)")
-    parser.add_argument("--synthetic_mask_folder", type=str, default="masks",
-                        help="Subfolder name containing masks within synthetic_data_dir (if needed for segmentation)")
-    # Removed split args, medmnist provides standard splits
-    # parser.add_argument("--val_split", type=float, help="Fraction of real data to use for validation set during downstream training.")
-    # parser.add_argument("--test_split", type=float, help="Fraction of real data to use for the final test set.")
-    parser.add_argument("--seed", type=int, help="Random seed (overrides config)")
-    parser.add_argument("--medmnist_download_dir", type=str, default="./data",
-                        help="Root directory to download MedMNIST data")
+    parser.add_argument("--batch_size", type=int, default=32,
+                        help="Batch size for evaluation")
+    parser.add_argument("--num_epochs", type=int, default=20,
+                        help="Number of epochs for training")
+    parser.add_argument("--image_size", type=int, default=128,
+                        help="Image size for evaluation")
+    parser.add_argument("--learning_rate", type=float, default=1e-4,
+                        help="Learning rate for training")
+    parser.add_argument("--synthetic_mask_folder", type=str,
+                        help="Subfolder for synthetic masks (segmentation task only)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable debug logging")
 
     return parser.parse_args()
 

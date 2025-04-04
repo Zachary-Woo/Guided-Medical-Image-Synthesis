@@ -26,7 +26,7 @@ def parse_args():
     
     # Train command
     train_parser = subparsers.add_parser("train", help="Train ControlNet model (Currently less relevant)")
-    train_parser.add_argument("--config", type=str, default="configs/default_config.yaml", 
+    train_parser.add_argument("--config", type=str, default="version1/configs/default_config.yaml", 
                              help="Path to configuration file")
     # Add any other train-specific args if needed, mirroring train.py
     train_parser.add_argument("--output_dir", type=str, help="Override output directory in config")
@@ -36,7 +36,7 @@ def parse_args():
     
     # Generate command
     generate_parser = subparsers.add_parser("generate", help="Generate medical images using a pre-trained ControlNet")
-    generate_parser.add_argument("--config", type=str, default="configs/default_config.yaml", 
+    generate_parser.add_argument("--config", type=str, default="version1/configs/default_config.yaml", 
                                help="Path to configuration file")
     # Removed checkpoint, uses config now
     # generate_parser.add_argument("--checkpoint", type=str, required=True, 
@@ -54,7 +54,7 @@ def parse_args():
     
     # Evaluate command
     evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate downstream task performance with/without synthetic data")
-    evaluate_parser.add_argument("--config", type=str, default="configs/medmnist_canny_demo.yaml",
+    evaluate_parser.add_argument("--config", type=str, default="version1/configs/medmnist_canny_demo.yaml",
                                help="Path to config file (specifies dataset name, etc.)")
     evaluate_parser.add_argument("--synthetic_data_dir", type=str, required=True,
                                help="Directory containing the generated synthetic images")
@@ -85,7 +85,7 @@ def parse_args():
     
     # Test command
     test_parser = subparsers.add_parser("test", help="Test pipeline components without performing full generation")
-    test_parser.add_argument("--config", type=str, default="configs/medmnist_canny_demo.yaml",
+    test_parser.add_argument("--config", type=str, default="version1/configs/medmnist_canny_demo.yaml",
                            help="Path to configuration file")
     test_parser.add_argument("--conditioning_image", type=str,
                            help="Path to a test image for conditioning")
@@ -135,7 +135,7 @@ def run_train(args):
         "num_epochs": args.num_epochs,
         "log_wandb": args.log_wandb
     }
-    cmd = build_command("train.py", args_dict)
+    cmd = build_command("version1/train.py", args_dict)
     print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -158,7 +158,7 @@ def run_generate(args):
         "batch_size": args.batch_size,
         "debug": args.debug
     }
-    cmd = build_command("generate.py", args_dict)
+    cmd = build_command("version1/generate.py", args_dict)
     print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -184,7 +184,7 @@ def run_evaluate(args):
         "synthetic_mask_folder": args.synthetic_mask_folder,
         "seed": args.seed
     }
-    cmd = build_command("evaluate.py", args_dict)
+    cmd = build_command("version1/evaluate.py", args_dict)
     print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -202,7 +202,7 @@ def run_extract(args):
         "num_samples": args.num_samples,
         "image_key": args.image_key
     }
-    cmd = build_command("extract_medmnist_samples.py", args_dict)
+    cmd = build_command("version1/extract_medmnist_samples.py", args_dict)
     print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -219,7 +219,7 @@ def run_test(args):
         "conditioning_image": args.conditioning_image,
         "verbose": args.verbose
     }
-    cmd = build_command("test_pipeline.py", args_dict)
+    cmd = build_command("version1/test_pipeline.py", args_dict)
     print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
     subprocess.run(cmd, check=True)
 

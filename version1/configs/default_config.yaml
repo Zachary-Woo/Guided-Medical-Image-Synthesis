@@ -1,0 +1,40 @@
+# Default configuration for Medical ControlNet
+
+data:
+  dataset_name: PathMNIST
+  data_dir: ./data/pathmnist
+  image_size: 512
+  batch_size: 8
+  num_workers: 4
+  mask_folder: null # For segmentation datasets, set to mask folder
+  augment_data: true
+  val_split: 0.1
+  test_split: 0.1
+
+model:
+  pretrained_model_id: runwayml/stable-diffusion-v1-5
+  controlnet_id: null # Using pre-trained one below for inference
+  use_lora: false
+  lora_rank: 4
+  trainable_modules: []
+  mixed_precision: fp16
+
+training:
+  output_dir: output/default_run
+  downstream_learning_rate: 1e-4
+  downstream_num_epochs: 20
+  seed: 42
+  log_wandb: false
+  wandb_project: medical-controlnet
+  wandb_run_name: default-run
+
+inference:
+  controlnet_inference_id: lllyasviel/sd-controlnet-canny
+  conditioning_type: canny
+  num_inference_steps: 50
+  guidance_scale: 7.5
+  num_images_per_prompt: 1
+  prompts:
+    - "High-resolution medical image"
+    - "Detailed medical scan"
+    - "Clear medical visualization" 

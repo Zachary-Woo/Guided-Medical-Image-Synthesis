@@ -32,4 +32,18 @@ python version1/simple_controlnet.py --condition_image ./data/pathmnist_samples/
 python version1/main.py generate --input_dir ./data/pathmnist_samples --output_dir ./output/pipeline
 ```
 
+### Using from Project Root
+
+After moving this code to the version1 folder, make sure to:
+
+1. Run scripts from the project root (not from within the version1 directory)
+2. Use paths that include the version1 prefix, e.g.:
+   - Config files: `version1/configs/medmnist_canny_demo.yaml`
+   - Output directories: `output/...` (not `outputs/...`)
+
+## Note on Directory Structure
+
+This version uses a single `output` directory (not `outputs`) for consistency with version2.
+The helper functions in version2 will automatically convert any `outputs/` paths to `output/`.
+
 See version2 for the enhanced implementation with stain normalization, LoRA support, and other advanced features. 

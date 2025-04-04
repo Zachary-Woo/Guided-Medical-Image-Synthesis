@@ -20,10 +20,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Add parent directory to path to import project modules
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
 
-from src.utils.config import Config
-from src.utils.pipeline_utils import (
+from version1.src.utils.config import Config
+from version1.src.utils.pipeline_utils import (
     load_sd_controlnet_pipeline,
     preprocess_image_for_controlnet,
     clear_gpu_memory
@@ -34,7 +35,7 @@ def parse_args():
     """Parse command line arguments for testing."""
     parser = argparse.ArgumentParser(description="Test ControlNet pipeline functionality")
     
-    parser.add_argument("--config", type=str, default="configs/medmnist_canny_demo.yaml",
+    parser.add_argument("--config", type=str, default="version1/configs/medmnist_canny_demo.yaml",
                        help="Path to configuration file")
     parser.add_argument("--conditioning_image", type=str,
                        help="Path to a test image for conditioning")
