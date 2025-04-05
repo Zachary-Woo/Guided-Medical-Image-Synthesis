@@ -1,0 +1,27 @@
+base_model_id: runwayml/stable-diffusion-v1-5
+dataset:
+  train_data_dir: output\processed_lora_data\train
+  validation_data_dir: output\processed_lora_data\validation
+lora:
+  alpha: 32
+  dropout: 0.1
+  r: 16
+  target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - out_proj
+preprocessing:
+  center_crop: true
+  random_flip: true
+  resolution: 512
+training:
+  checkpointing_steps: 500
+  gradient_accumulation_steps: 4
+  learning_rate: 0.0001
+  max_train_steps: 2000
+  num_train_epochs: 100
+  output_dir: version2/models/lora_histopathology
+  seed: 42
+  train_batch_size: 1
+  validation_steps: 100

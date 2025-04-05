@@ -31,7 +31,7 @@ python version2/main.py setup-output
 
 # Prepare LoRA training for a local dataset (Corrected Command Name & Args)
 # Assumes your images are in 'data/training_images'
-python version2/main.py prepare --dataset local --local_dataset_path data/training_images --output_dir output/processed_lora_data --stain_norm macenko
+python version2/main.py prepare --dataset local --local_dataset_path data/pathmnist_128.npz --output_dir output/processed_lora_data --stain_norm macenko
 
 
 # --- Evaluation Commands ---

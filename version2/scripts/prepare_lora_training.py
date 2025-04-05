@@ -193,23 +193,34 @@ def find_image_files(directory, extensions=['.png', '.jpg', '.jpeg', '.tif', '.t
     
     return sorted(image_files)
 
-def preprocess_image(image_path, output_path, target_size, stain_norm="macenko", reference_image=None):
+def preprocess_image(image_input, output_path, target_size, stain_norm="macenko", reference_image=None, is_numpy_array=False):
     """
     Preprocess an image for LoRA fine-tuning.
     
     Args:
-        image_path: Path to the image
+        image_input: Path to the image or a NumPy array
         output_path: Path to save the preprocessed image
         target_size: Target image size
         stain_norm: Stain normalization method
         reference_image: Reference image for stain normalization
+        is_numpy_array: Flag indicating if image_input is a NumPy array
         
     Returns:
         True if successful, False otherwise
     """
     try:
         # Load the image
-        image = Image.open(image_path).convert("RGB")
+        if is_numpy_array:
+            if image_input.ndim == 2: # Handle grayscale images if necessary
+                image = Image.fromarray(image_input).convert("RGB")
+            elif image_input.ndim == 3 and image_input.shape[2] == 1:
+                image = Image.fromarray(image_input.squeeze()).convert("RGB")
+            elif image_input.ndim == 3 and image_input.shape[2] == 3:
+                image = Image.fromarray(image_input)
+            else:
+                 raise ValueError(f"Unsupported NumPy array shape: {image_input.shape}")
+        else:
+            image = Image.open(image_input).convert("RGB")
         
         # Resize the image
         if image.width != target_size or image.height != target_size:
@@ -226,11 +237,13 @@ def preprocess_image(image_path, output_path, target_size, stain_norm="macenko",
             image = Image.fromarray(normalized_np)
         
         # Save the preprocessed image
+        output_path.parent.mkdir(parents=True, exist_ok=True) # Ensure output dir exists
         image.save(output_path)
         return True
     
     except Exception as e:
-        logger.error(f"Error preprocessing image {image_path}: {e}")
+        input_source = "NumPy array" if is_numpy_array else str(image_input)
+        logger.error(f"Error preprocessing image from {input_source}: {e}", exc_info=True)
         return False
 
 def create_training_metadata(image_files, output_dir, caption="Histopathology slide showing tissue sample with cellular details, H&E stain"):
@@ -444,44 +457,86 @@ def process_kather_texture_dataset(extract_dir, output_dir, args):
     
     return processed_dir
 
-def process_local_dataset(local_path, output_dir, args):
+def process_local_dataset(local_path_str, output_dir, args):
     """
-    Process a local dataset.
+    Process a local dataset, supporting both directories and .npz files.
     
     Args:
-        local_path: Path to local dataset
+        local_path_str: Path to local dataset (directory or .npz file)
         output_dir: Directory to save processed dataset
         args: Command line arguments
         
     Returns:
         Path to processed dataset
     """
-    if not local_path:
+    if not local_path_str:
         logger.error("Local dataset path not provided")
         return None
     
-    local_path = Path(local_path)
+    local_path = Path(local_path_str)
     if not local_path.exists():
         logger.error(f"Local dataset path does not exist: {local_path}")
         return None
+
+    image_inputs = []
+    is_numpy_input = False
+
+    if local_path.is_file() and local_path.suffix == '.npz':
+        logger.info(f"Loading images from .npz file: {local_path}")
+        try:
+            with np.load(local_path) as data:
+                # --- ASSUMPTION: Images are stored under the key 'train_images' --- # 
+                # --- If this is incorrect, change the key below --- #
+                image_key = 'train_images' 
+                if image_key not in data:
+                    available_keys = list(data.keys())
+                    logger.error(f"Could not find key '{image_key}' in {local_path}. Available keys: {available_keys}")
+                    # Attempt to find a suitable key heuristically
+                    potential_keys = [k for k in available_keys if 'image' in k.lower() or 'img' in k.lower()]
+                    if potential_keys:
+                         image_key = potential_keys[0]
+                         logger.warning(f"Attempting to use key '{image_key}' instead.")
+                    else:
+                         logger.error("Could not identify a suitable image array key. Please check the .npz file structure.")
+                         return None
+
+                images_np = data[image_key]
+                logger.info(f"Found {len(images_np)} images in .npz file under key '{image_key}' with shape {images_np.shape}")
+                image_inputs = list(images_np) # Convert to list of arrays for iteration
+                is_numpy_input = True
+        except Exception as e:
+            logger.error(f"Failed to load or process .npz file {local_path}: {e}", exc_info=True)
+            return None
+
+    elif local_path.is_dir():
+        logger.info(f"Searching for image files in directory: {local_path}")
+        image_inputs = find_image_files(local_path)
+        logger.info(f"Found {len(image_inputs)} image files in directory")
+        is_numpy_input = False
+    else:
+        logger.error(f"Unsupported local dataset path type: {local_path}. Must be a directory or .npz file.")
+        return None
     
-    # Find all image files
-    image_files = find_image_files(local_path)
-    logger.info(f"Found {len(image_files)} images in {local_path}")
-    
+    if not image_inputs:
+        logger.warning("No images found or loaded from the specified path.")
+        return None
+
     # Sample images if needed
     np.random.seed(args.seed)
-    if len(image_files) > args.num_samples:
-        image_files = np.random.choice(image_files, args.num_samples, replace=False).tolist()
-        logger.info(f"Sampled {len(image_files)} images for processing")
+    if len(image_inputs) > args.num_samples:
+        indices = np.random.choice(len(image_inputs), args.num_samples, replace=False)
+        image_inputs = [image_inputs[i] for i in indices]
+        logger.info(f"Sampled {len(image_inputs)} images for processing")
     
-    # Create train/validation split
-    np.random.shuffle(image_files)
-    split_idx = int(len(image_files) * args.train_val_split)
-    train_files = image_files[:split_idx]
-    val_files = image_files[split_idx:]
+    # Create train/validation split indices
+    num_images = len(image_inputs)
+    indices = list(range(num_images))
+    np.random.shuffle(indices)
+    split_idx = int(num_images * args.train_val_split)
+    train_indices = indices[:split_idx]
+    val_indices = indices[split_idx:]
     
-    logger.info(f"Split dataset into {len(train_files)} training and {len(val_files)} validation images")
+    logger.info(f"Split dataset into {len(train_indices)} training and {len(val_indices)} validation indices")
     
     # Load reference image for stain normalization if provided
     reference_image = None
@@ -492,7 +547,11 @@ def process_local_dataset(local_path, output_dir, args):
         except Exception as e:
             logger.error(f"Failed to load reference image: {e}")
             logger.warning("Proceeding without stain normalization reference")
-    
+            reference_image = None # Ensure it's None if loading failed
+    # Log warning for synthetic reference ONCE if applicable
+    elif args.stain_norm.lower() != "none":
+        logger.warning("No reference image provided via --reference_image. Using synthetic reference for normalization.")
+
     # Create output directories
     processed_dir = Path(output_dir)
     train_dir = processed_dir / "train"
@@ -500,32 +559,38 @@ def process_local_dataset(local_path, output_dir, args):
     train_dir.mkdir(parents=True, exist_ok=True)
     val_dir.mkdir(parents=True, exist_ok=True)
     
+    train_processed_paths = []
+    val_processed_paths = []
+
     # Process training images
     logger.info("Processing training images...")
-    train_processed = []
-    for image_file in tqdm(train_files, desc="Processing training images"):
-        output_path = train_dir / image_file.name
+    for i in tqdm(train_indices, desc="Processing training images"):
+        img_input = image_inputs[i]
+        # Generate a filename based on index if from NPZ, otherwise use original name
+        filename = f"image_{i:06d}.png" if is_numpy_input else Path(img_input).name
+        output_path = train_dir / filename
         if preprocess_image(
-            image_file, output_path, args.target_size,
-            stain_norm=args.stain_norm, reference_image=reference_image
+            img_input, output_path, args.target_size,
+            stain_norm=args.stain_norm, reference_image=reference_image, is_numpy_array=is_numpy_input
         ):
-            train_processed.append(output_path)
+            train_processed_paths.append(output_path)
     
     # Process validation images
     logger.info("Processing validation images...")
-    val_processed = []
-    for image_file in tqdm(val_files, desc="Processing validation images"):
-        output_path = val_dir / image_file.name
+    for i in tqdm(val_indices, desc="Processing validation images"):
+        img_input = image_inputs[i]
+        filename = f"image_{i:06d}.png" if is_numpy_input else Path(img_input).name
+        output_path = val_dir / filename
         if preprocess_image(
-            image_file, output_path, args.target_size,
-            stain_norm=args.stain_norm, reference_image=reference_image
+            img_input, output_path, args.target_size,
+            stain_norm=args.stain_norm, reference_image=reference_image, is_numpy_array=is_numpy_input
         ):
-            val_processed.append(output_path)
+            val_processed_paths.append(output_path)
     
-    logger.info(f"Processed {len(train_processed)} training and {len(val_processed)} validation images")
+    logger.info(f"Processed {len(train_processed_paths)} training and {len(val_processed_paths)} validation images")
     
-    # Create metadata
-    create_training_metadata(train_processed + val_processed, processed_dir)
+    # Create metadata using the processed paths
+    create_training_metadata(train_processed_paths + val_processed_paths, processed_dir)
     
     return processed_dir
 

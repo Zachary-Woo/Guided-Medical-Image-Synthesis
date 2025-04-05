@@ -1,6 +1,8 @@
-# Main dependencies
-torch>=2.0.0
-torchvision>=0.15.0
+--index-url https://download.pytorch.org/whl/cu118
+
+torch==2.1.2+cu118
+torchvision==0.16.2+cu118
+torchaudio==2.1.2+cu118
 numpy>=1.24.0
 pillow>=10.0.0
 matplotlib>=3.7.0
@@ -19,6 +21,7 @@ huggingface-hub>=0.16.0
 # NOTE: xformers installation might fail on some platforms
 # If xformers fails, comment it out and the model will still work (just slower)
 # xformers>=0.0.20
+xformers==0.0.29.post3
 
 # Medical imaging and evaluation dependencies
 monai>=1.2.0
@@ -30,4 +33,5 @@ medmnist>=3.0.0
 wandb>=0.15.0
 
 # Memory management
-psutil>=5.9.0 
+psutil>=5.9.0
+bitsandbytes-windows>=0.37.5 

@@ -1,0 +1,13 @@
+{
+  "peft_type": "LORA",
+  "task_type": "TEXT_TO_IMAGE",
+  "base_model_name_or_path": "runwayml/stable-diffusion-v1-5",
+  "lora_rank": 16,
+  "lora_alpha": 32,
+  "target_modules": [
+    "to_q",
+    "to_k",
+    "to_v",
+    "to_out.0"
+  ]
+}

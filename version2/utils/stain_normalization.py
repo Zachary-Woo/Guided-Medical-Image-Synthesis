@@ -308,7 +308,7 @@ def normalize_histopathology_image(image, reference_image=None, method='macenko'
     if reference_image is None:
         # Create a synthetic H&E reference (simplified approach)
         # In practice, you should use a real reference image from your dataset
-        logger.warning("No reference image provided. Using synthetic reference.")
+        # logger.warning("No reference image provided. Using synthetic reference.") # Warning moved to calling function
         reference = np.zeros((100, 100, 3), dtype=np.uint8)
         # H&E typical colors (simplified)
         reference[:50, :, 0] = 150  # Hematoxylin - purple/blue (more R and B)

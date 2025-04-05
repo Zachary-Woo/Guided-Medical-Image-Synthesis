@@ -117,12 +117,16 @@ def main():
     device = "cuda" if cuda_available else "cpu"
     print(f"Using device: {device}")
     
-    # Input and output paths
+    # --- Configuration ---
+    seed = 123 # Define the seed here
     condition_image_path = Path("data") / "pathmnist_samples" / "sample_0000.png"
-    lora_path = Path("version2") / "models" / "lora" / "medical_lora.safetensors"
-    output_dir = Path("output/lora_test")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
+    #lora_path = Path("version2") / "models" / "lora" / "medical_lora.safetensors" # Old (Non-trained model)
+    lora_path = Path("version2") / "models" / "lora_histopathology" / "adapter_model.safetensors" # Custom Trained model
+    base_output_dir = Path("output")
+    output_dir = base_output_dir / f"lora_test_{seed}" # Create seed-specific path
+    output_dir.mkdir(parents=True, exist_ok=True) # Create the directory
+    # --- End Configuration ---
+
     # Check if input image exists
     if not condition_image_path.exists():
         logger.error(f"Input image not found: {condition_image_path}")
@@ -186,7 +190,7 @@ def main():
     negative_prompt = "blurry, low quality, low resolution, deformed, distorted, watermark, text"
     
     # Set seed for reproducibility
-    generator = torch.manual_seed(42)
+    generator = torch.manual_seed(seed) # Use the seed variable
     
     start_time = time.time()
     image = pipeline(

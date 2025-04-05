@@ -342,7 +342,7 @@ def run_setup_cuda(args):
         subprocess.run([
             sys.executable, "-m", "pip", "install", 
             "torch", "torchvision", "torchaudio", 
-            "--index-url", "https://download.pytorch.org/whl/cu121"
+            "--index-url", "https://download.pytorch.org/whl/cu118"
         ], check=True)
         print("✓ PyTorch with CUDA installed successfully")
     except subprocess.CalledProcessError as e:
@@ -360,17 +360,11 @@ def run_setup_cuda(args):
     # Install xformers for memory efficiency
     print("\nInstalling xformers for memory efficiency...")
     try:
-        subprocess.run([sys.executable, "-m", "pip", "install", "xformers"], check=True)
+        # Add --no-deps to prevent installing torch dependency
+        subprocess.run([sys.executable, "-m", "pip", "install", "xformers", "--no-deps"], check=True)
         print("✓ xformers installed successfully")
     except subprocess.CalledProcessError as e:
         print(f"× Failed to install xformers: {e}")
-    
-    print("\nReinstalling all required packages...")
-    try:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
-        print("✓ All packages reinstalled successfully")
-    except subprocess.CalledProcessError as e:
-        print(f"× Failed to reinstall packages: {e}")
     
     print("\n" + "="*80)
     print(" CUDA SETUP COMPLETE ".center(80, "="))
