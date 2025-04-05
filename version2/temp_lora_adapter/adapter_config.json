@@ -1,0 +1,14 @@
+{
+  "base_model_name_or_path": "runwayml/stable-diffusion-v1-5",
+  "inference_scheduler_config": null,
+  "lora_alpha": 0.8,
+  "lora_dropout": 0.0,
+  "peft_type": "LORA",
+  "rank": 4,
+  "target_modules": [
+    "to_k",
+    "to_q",
+    "to_v",
+    "to_out.0"
+  ]
+}

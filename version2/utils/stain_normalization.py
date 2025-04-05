@@ -139,32 +139,62 @@ class MacenkoNormalizer(StainNormalizer):
             optical_density_pixels = optical_density_reshaped
         
         # Compute SVD
-        _, eigvecs = np.linalg.eigh(np.cov(optical_density_pixels.T))
-        
-        # Take the two principal eigenvectors
-        eigvecs = eigvecs[:, [1, 2]]
-        
-        # Project data onto eigenvectors
-        proj = optical_density_pixels @ eigvecs
-        
-        # Find the angle of each projected pixel
-        phi = np.arctan2(proj[:, 1], proj[:, 0])
-        
-        # Find the angles that enclose the percentile of data
-        min_phi = np.percentile(phi, beta)
-        max_phi = np.percentile(phi, 100 - beta)
-        
-        # Calculate the corresponding vectors
-        v1 = np.dot(eigvecs, np.array([np.cos(min_phi), np.sin(min_phi)]))
-        v2 = np.dot(eigvecs, np.array([np.cos(max_phi), np.sin(max_phi)]))
-        
-        # Ensure correct ordering of stain vectors (H first, then E)
-        if v1[0] < v2[0]:
-            stain_matrix = np.column_stack([v1, v2])
-        else:
-            stain_matrix = np.column_stack([v2, v1])
-        
-        return stain_matrix
+        try:
+            cov = np.cov(optical_density_pixels.T)
+            _, eigvecs = np.linalg.eigh(cov)
+            
+            # Check dimensionality - ensure we're getting 3 eigenvectors
+            if eigvecs.shape[1] < 3:
+                logger.warning(f"Insufficient eigenvectors: {eigvecs.shape}. Adding synthetic components.")
+                # If we don't have enough eigenvectors, create synthetic ones 
+                # This can happen with synthetic/uniform color areas
+                missing_dims = 3 - eigvecs.shape[1]
+                synthetic_vecs = np.random.rand(eigvecs.shape[0], missing_dims)
+                eigvecs = np.column_stack([eigvecs, synthetic_vecs])
+            
+            # Take the two principal eigenvectors (columns 1 and 2, indices 0-indexed)
+            eigvecs = eigvecs[:, [1, 2]]
+            
+            # Project data onto eigenvectors
+            proj = optical_density_pixels @ eigvecs
+            
+            # Find the angle of each projected pixel
+            phi = np.arctan2(proj[:, 1], proj[:, 0])
+            
+            # Find the angles that enclose the percentile of data
+            min_phi = np.percentile(phi, beta)
+            max_phi = np.percentile(phi, 100 - beta)
+            
+            # Calculate the corresponding vectors
+            v1 = np.dot(eigvecs, np.array([np.cos(min_phi), np.sin(min_phi)]))
+            v2 = np.dot(eigvecs, np.array([np.cos(max_phi), np.sin(max_phi)]))
+            
+            # Ensure correct ordering of stain vectors (H first, then E)
+            if v1[0] < v2[0]:
+                stain_matrix = np.column_stack([v1, v2])
+            else:
+                stain_matrix = np.column_stack([v2, v1])
+                
+            # Make sure the stain matrix has the right shape (3x2)
+            if stain_matrix.shape != (3, 2):
+                logger.warning(f"Invalid stain matrix shape: {stain_matrix.shape}, expected (3, 2)")
+                # Create a fallback stain matrix for H&E
+                stain_matrix = np.array([
+                    [0.650, 0.072],  # Red
+                    [0.704, 0.990],  # Green
+                    [0.286, 0.105]   # Blue
+                ])
+                
+            return stain_matrix
+            
+        except np.linalg.LinAlgError as e:
+            logger.error(f"Linear algebra error in stain matrix computation: {e}")
+            # Create a default stain matrix as fallback
+            return np.array([
+                [0.650, 0.072],  # Red
+                [0.704, 0.990],  # Green
+                [0.286, 0.105]   # Blue
+            ])
     
     def fit(self, target_image):
         """Fit normalizer to a target image"""
@@ -186,7 +216,7 @@ class MacenkoNormalizer(StainNormalizer):
         
         # Calculate the concentrations using pseudo-inverse
         stain_matrix_pinv = np.linalg.pinv(self.stain_matrix_target)
-        self.concentrations_target = optical_density_reshaped @ stain_matrix_pinv
+        self.concentrations_target = optical_density_reshaped @ stain_matrix_pinv.T
         
         # Calculate max concentration for later scaling
         self.max_concentration_target = np.percentile(self.concentrations_target, 99, axis=0)
@@ -216,7 +246,7 @@ class MacenkoNormalizer(StainNormalizer):
         
         # Calculate the concentrations using pseudo-inverse
         stain_matrix_source_pinv = np.linalg.pinv(stain_matrix_source)
-        concentrations_source = optical_density_reshaped @ stain_matrix_source_pinv
+        concentrations_source = optical_density_reshaped @ stain_matrix_source_pinv.T
         
         # Calculate max concentration for scaling
         max_concentration_source = np.percentile(concentrations_source, 99, axis=0)
@@ -225,7 +255,7 @@ class MacenkoNormalizer(StainNormalizer):
         concentrations_source_normalized = concentrations_source * (self.max_concentration_target / max_concentration_source)
         
         # Recreate the optical density image
-        optical_density_normalized = concentrations_source_normalized @ self.stain_matrix_target
+        optical_density_normalized = concentrations_source_normalized @ self.stain_matrix_target.T
         
         # Convert back to RGB
         rgb_normalized = 255.0 * np.exp(-optical_density_normalized)

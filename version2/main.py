@@ -124,6 +124,12 @@ def parse_args():
     setup_output_parser.add_argument("--subdirs", nargs="+", default=[],
                                     help="Additional subdirectories to create in output")
     
+    # Setup CUDA command
+    setup_cuda_parser = subparsers.add_parser("setup-cuda",
+                                            help="Install CUDA dependencies for GPU acceleration")
+    setup_cuda_parser.add_argument("--force", action="store_true",
+                                  help="Force reinstallation even if CUDA is available")
+    
     return parser.parse_args()
 
 
@@ -301,6 +307,78 @@ def run_setup_output(args):
     subprocess.run(cmd, check=True)
 
 
+def run_setup_cuda(args):
+    """
+    Install CUDA dependencies for GPU acceleration
+    
+    Args:
+        args (argparse.Namespace): Parsed arguments
+    """
+    print("\n" + "="*80)
+    print(" INSTALLING CUDA DEPENDENCIES ".center(80, "="))
+    print("="*80 + "\n")
+    
+    # Check if CUDA is already available
+    has_cuda = False
+    try:
+        import torch
+        has_cuda = torch.cuda.is_available()
+        
+        if has_cuda and not args.force:
+            gpu_name = torch.cuda.get_device_name(0)
+            print(f"✓ CUDA already available: {gpu_name}")
+            print("To reinstall anyway, use the --force flag")
+            return
+    except:
+        print("× PyTorch not found or CUDA not available")
+    
+    # Install CUDA-enabled PyTorch
+    print("Installing CUDA-enabled PyTorch...")
+    try:
+        # Uninstall existing PyTorch
+        subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "torch", "torchvision", "torchaudio"], check=False)
+        
+        # Install CUDA version
+        subprocess.run([
+            sys.executable, "-m", "pip", "install", 
+            "torch", "torchvision", "torchaudio", 
+            "--index-url", "https://download.pytorch.org/whl/cu121"
+        ], check=True)
+        print("✓ PyTorch with CUDA installed successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"× Failed to install PyTorch with CUDA: {e}")
+    
+    # Install GPU-enabled bitsandbytes
+    print("\nInstalling GPU-enabled bitsandbytes...")
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "bitsandbytes"], check=False)
+        subprocess.run([sys.executable, "-m", "pip", "install", "bitsandbytes-windows"], check=True)
+        print("✓ bitsandbytes-windows installed successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"× Failed to install bitsandbytes-windows: {e}")
+    
+    # Install xformers for memory efficiency
+    print("\nInstalling xformers for memory efficiency...")
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "xformers"], check=True)
+        print("✓ xformers installed successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"× Failed to install xformers: {e}")
+    
+    print("\nReinstalling all required packages...")
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
+        print("✓ All packages reinstalled successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"× Failed to reinstall packages: {e}")
+    
+    print("\n" + "="*80)
+    print(" CUDA SETUP COMPLETE ".center(80, "="))
+    print("="*80)
+    print("\nPlease restart your Python environment to apply changes!")
+    print("You may need to restart your terminal/IDE as well.")
+
+
 def main():
     """
     Main function.
@@ -322,6 +400,8 @@ def main():
             run_setup()
         elif args.command == "setup-output":
             run_setup_output(args)
+        elif args.command == "setup-cuda":
+            run_setup_cuda(args)
     except subprocess.CalledProcessError as e:
         print(f"Error running command '{args.command}': {e}", file=sys.stderr)
         sys.exit(1)

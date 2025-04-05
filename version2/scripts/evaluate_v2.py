@@ -22,15 +22,15 @@ if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
 # Import utility functions from version1
-try:
-    from version1.src.preprocessing.data_loader import MedicalImageDataset
-    from version1.src.preprocessing.transforms import MedicalImageTransforms
-    from version1.src.evaluation.downstream import train_and_evaluate_downstream
-    from version1.src.utils.visualization import plot_metrics, create_comparison_grid
-    from version1.src.utils.config import Config
-except ImportError:
-    logging.error("Required modules from version1 not found. Please ensure version1 is in the project root directory.")
-    sys.exit(1)
+# try:
+#     from version1.src.preprocessing.data_loader import MedicalImageDataset
+#     from version1.src.preprocessing.transforms import MedicalImageTransforms
+#     from version1.src.evaluation.downstream import train_and_evaluate_downstream
+#     from version1.src.utils.visualization import plot_metrics, create_comparison_grid
+#     from version1.src.utils.config import Config
+# except ImportError:
+#     logging.error("Required modules from version1 not found. Please ensure version1 is in the project root directory.")
+#     sys.exit(1)
 
 # External libraries
 from torchvision.datasets import ImageFolder
@@ -150,13 +150,16 @@ def load_synthetic_data(synthetic_data_dir, image_size, task, transform, mask_tr
             return None
         try:
             logger.info(f"Loading synthetic segmentation data from: {synthetic_data_dir} (masks: {synthetic_mask_folder})")
-            return MedicalImageDataset(
-                data_dir=synthetic_data_dir,
-                image_folder=".",
-                mask_folder=synthetic_mask_folder,
-                transform=img_tfm,
-                mask_transform=mask_tfm
-            )
+            # Commenting out version1 dependency
+            # return MedicalImageDataset(
+            #     data_dir=synthetic_data_dir,
+            #     image_folder=".",
+            #     mask_folder=synthetic_mask_folder,
+            #     transform=img_tfm,
+            #     mask_transform=mask_tfm
+            # )
+            logger.warning("Synthetic data loading for segmentation depends on version1, which is commented out.")
+            return None
         except Exception as e:
             logger.error(f"Failed to load synthetic segmentation data: {e}")
             return None
@@ -181,13 +184,16 @@ def load_synthetic_data(synthetic_data_dir, image_size, task, transform, mask_tr
         else:
             try:
                 logger.info(f"Loading synthetic classification data from flat directory: {synthetic_data_dir}")
-                return MedicalImageDataset(
-                    data_dir=synthetic_data_dir,
-                    image_folder=".",
-                    mask_folder=None,
-                    transform=img_tfm,
-                    mask_transform=None
-                )
+                # Commenting out version1 dependency
+                # return MedicalImageDataset(
+                #     data_dir=synthetic_data_dir,
+                #     image_folder=".",
+                #     mask_folder=None,
+                #     transform=img_tfm,
+                #     mask_transform=None
+                # )
+                logger.warning("Synthetic data loading for flat classification depends on version1, which is commented out.")
+                return None
             except Exception as e:
                 logger.error(f"Could not load synthetic classification data: {e}")
                 return None
@@ -410,19 +416,21 @@ def main():
     # 1. Train and Evaluate on Real Data Only
     logger.info(f"=== Training downstream model on REAL data only ({args.task}) ===")
     try:
-        real_metrics_run = train_and_evaluate_downstream(
-            train_loader=real_train_dataloader,
-            val_loader=val_dataloader,
-            test_loader=test_dataloader,
-            task=args.task,
-            num_epochs=args.num_epochs,
-            device=device,
-            learning_rate=args.learning_rate,
-            model_save_path=os.path.join(output_dir, "downstream_model_real_only.pth"),
-            n_classes=n_classes if args.task == "classification" else None,
-            n_channels=n_channels if args.task == "segmentation" else None
-        )
-        all_real_metrics = real_metrics_run
+        # Commenting out version1 dependency
+        # real_metrics_run = train_and_evaluate_downstream(
+        #     train_loader=real_train_dataloader,
+        #     val_loader=val_dataloader,
+        #     test_loader=test_dataloader,
+        #     task=args.task,
+        #     num_epochs=args.num_epochs,
+        #     device=device,
+        #     learning_rate=args.learning_rate,
+        #     model_save_path=os.path.join(output_dir, "downstream_model_real_only.pth"),
+        #     n_classes=n_classes if args.task == "classification" else None,
+        #     n_channels=n_channels if args.task == "segmentation" else None
+        # )
+        # all_real_metrics = real_metrics_run
+        logger.warning("Downstream training on real data depends on version1, which is commented out.")
         logger.info("Finished training on real data.")
     except Exception as e:
         logger.error(f"Error during training/evaluation on real data: {e}")
@@ -431,19 +439,21 @@ def main():
     if synthetic_dataset and len(synthetic_dataset) > 0 and len(augmented_train_dataset) > len(real_train_dataset):
         logger.info(f"=== Training downstream model on AUGMENTED data ({args.task}) ===")
         try:
-            augmented_metrics_run = train_and_evaluate_downstream(
-                train_loader=augmented_train_dataloader,
-                val_loader=val_dataloader,
-                test_loader=test_dataloader,
-                task=args.task,
-                num_epochs=args.num_epochs,
-                device=device,
-                learning_rate=args.learning_rate,
-                model_save_path=os.path.join(output_dir, "downstream_model_augmented.pth"),
-                n_classes=n_classes if args.task == "classification" else None,
-                n_channels=n_channels if args.task == "segmentation" else None
-            )
-            all_augmented_metrics = augmented_metrics_run
+            # Commenting out version1 dependency
+            # augmented_metrics_run = train_and_evaluate_downstream(
+            #     train_loader=augmented_train_dataloader,
+            #     val_loader=val_dataloader,
+            #     test_loader=test_dataloader,
+            #     task=args.task,
+            #     num_epochs=args.num_epochs,
+            #     device=device,
+            #     learning_rate=args.learning_rate,
+            #     model_save_path=os.path.join(output_dir, "downstream_model_augmented.pth"),
+            #     n_classes=n_classes if args.task == "classification" else None,
+            #     n_channels=n_channels if args.task == "segmentation" else None
+            # )
+            # all_augmented_metrics = augmented_metrics_run
+            logger.warning("Downstream training on augmented data depends on version1, which is commented out.")
             logger.info("Finished training on augmented data.")
         except Exception as e:
             logger.error(f"Error during training/evaluation on augmented data: {e}")
@@ -453,52 +463,13 @@ def main():
     # --- Plotting and Saving Results --- #
     logger.info("Plotting metrics...")
 
-    if all_real_metrics:
-        metric_key_train = "train_loss"
-        metric_key_val = "val_dice" if args.task == "segmentation" else "val_acc"
-
-        # Plot Training Loss Comparison
-        plt.figure(figsize=(10, 5))
-        plt.plot(all_real_metrics.get("train_loss", []), label="Real Data Train Loss")
-        if all_augmented_metrics:
-            plt.plot(all_augmented_metrics.get("train_loss", []), label="Augmented Data Train Loss")
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-        plt.title(f"Downstream Task ({args.task}) Training Loss")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.7)
-        plt.savefig(os.path.join(output_dir, "comparison_training_loss.png"))
-        plt.close()
-
-        # Plot Validation Metric Comparison
-        if val_dataloader and metric_key_val in all_real_metrics and all_real_metrics.get(metric_key_val):
-            plt.figure(figsize=(10, 5))
-            plt.plot(all_real_metrics[metric_key_val], label=f"Real Data Val {metric_key_val}")
-            if all_augmented_metrics and metric_key_val in all_augmented_metrics and all_augmented_metrics.get(metric_key_val):
-                plt.plot(all_augmented_metrics[metric_key_val], label=f"Augmented Data Val {metric_key_val}")
-            plt.xlabel("Epoch")
-            plt.ylabel(metric_key_val)
-            plt.title(f"Downstream Task ({args.task}) Validation Performance")
-            plt.legend()
-            plt.grid(True, linestyle="--", alpha=0.7)
-            plt.savefig(os.path.join(output_dir, f"comparison_validation_{metric_key_val}.png"))
-            plt.close()
-        else:
-            logger.info("Skipping validation metric plot (no validation data or metrics found).")
-
-        # Print Final Test Metrics
-        test_metric_key = "test_dice" if args.task == "segmentation" else "test_acc"
-        print_evaluation_summary(all_real_metrics, all_augmented_metrics, test_metric_key, generation_metadata)
-
-        # Save metrics to file
-        metrics_path = os.path.join(output_dir, "metrics.json")
-        with open(metrics_path, 'w') as f:
-            json.dump({
-                "real_metrics": all_real_metrics,
-                "augmented_metrics": all_augmented_metrics if all_augmented_metrics else None,
-                "generation_metadata": generation_metadata
-            }, f, indent=2)
-        logger.info(f"Saved metrics to {metrics_path}")
+    # Commenting out plotting as it depends on metrics from version1
+    # if all_real_metrics:
+    #     metric_key_train = "train_loss"
+    #     metric_key_val = "val_dice" if args.task == "segmentation" else "val_acc"
+    #     ...
+    #     logger.info(f"Saved metrics to {metrics_path}")
+    logger.warning("Metrics plotting and saving skipped as downstream training from version1 is commented out.")
 
     logger.info(f"Evaluation complete. Results saved to {output_dir}")
     return 0

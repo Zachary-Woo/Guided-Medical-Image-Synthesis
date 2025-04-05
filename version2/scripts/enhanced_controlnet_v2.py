@@ -16,6 +16,64 @@ import numpy as np
 import cv2
 import json
 import time
+import matplotlib.pyplot as plt
+
+# Check CUDA availability and installation status
+def check_cuda_installation():
+    """Check CUDA installation and provide helpful error messages"""
+    cuda_available = torch.cuda.is_available()
+    
+    if not cuda_available:
+        print("\n" + "="*80)
+        print("WARNING: CUDA NOT DETECTED - GPU ACCELERATION UNAVAILABLE")
+        print("="*80)
+        print("Your system does not have proper CUDA setup for PyTorch.")
+        print("This will result in significantly slower generation speeds.")
+        print("\nPossible solutions:")
+        print("1. Install CUDA-enabled version of PyTorch:")
+        print("   pip uninstall torch torchvision torchaudio")
+        print("   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121")
+        print("2. Install GPU-enabled bitsandbytes:")
+        print("   pip uninstall bitsandbytes")
+        print("   pip install bitsandbytes-windows")
+        print("3. Install proper CUDA version matching your PyTorch")
+        print("   Download from: https://developer.nvidia.com/cuda-downloads")
+        print("="*80 + "\n")
+        return False
+    
+    print("\n" + "="*80)
+    print(f"CUDA AVAILABLE: {torch.cuda.get_device_name(0)}")
+    cuda_version = torch.version.cuda if hasattr(torch.version, 'cuda') else "Unknown"
+    print(f"CUDA Version: {cuda_version}")
+    print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    
+    # Check for GPU-related packages
+    # Wrap bitsandbytes import to catch potential runtime errors during its setup
+    try:
+        import bitsandbytes
+        print("bitsandbytes: Installed and imported successfully")
+    except ImportError:
+        print("bitsandbytes: Not installed (optional performance library)")
+        print("  Install with: pip install bitsandbytes-windows (or appropriate version)")
+    except Exception as e:
+        # Catch other errors (like the RuntimeError from CUDA setup failure)
+        print(f"bitsandbytes: Failed to import or initialize ({type(e).__name__}). Will proceed without it.")
+        print(f"  Error details: {e}")
+        print("  This is often due to CUDA version mismatch or missing dependencies for bitsandbytes.")
+        print("  Check bitsandbytes documentation for compatibility with your CUDA/PyTorch version.")
+    
+    try:
+        import xformers
+        print("xformers: Installed")
+    except ImportError:
+        print("xformers: Not installed (recommended for memory efficiency)")
+        print("  Install with: pip install xformers")
+    
+    print("="*80 + "\n")
+    return True
+
+# Run CUDA check at import time
+CUDA_AVAILABLE = check_cuda_installation()
 
 # Configure logging
 logging.basicConfig(
@@ -142,6 +200,10 @@ def parse_args():
                         help="Enable debug logging")
     parser.add_argument("--save_intermediates", action="store_true",
                         help="Save intermediate processed images")
+    parser.add_argument("--use_multi_controlnet", action="store_true",
+                        help="Use multiple ControlNet models (requires reference image)")
+    parser.add_argument("--no_metadata", action="store_true",
+                        help="Skip saving metadata file")
     
     return parser.parse_args()
 
@@ -218,16 +280,40 @@ def create_enhanced_edge_map(image_path, low_threshold=30, high_threshold=120, t
         try:
             # Create a direct visualization of the stain normalization effect
             if save_intermediates and save_dir:
-                # Generate visualization comparing original vs normalized
-                comparison_img = visualize_normalization(
-                    resized_np, 
-                    reference_image=reference_image,
-                    method=stain_method
-                )
-                # Save the comparison visualization
-                comparison_path = save_dir / "stain_normalization_comparison.png"
-                Image.fromarray(comparison_img).save(comparison_path)
-                logger.info(f"Saved stain normalization comparison to {comparison_path}")
+                try:
+                    # Create a synthetic reference if none is provided
+                    ref_img = reference_image
+                    if ref_img is None:
+                        # Create a synthetic H&E reference
+                        ref_img = np.zeros((100, 100, 3), dtype=np.uint8)
+                        ref_img[:50, :, 0] = 150  # Hematoxylin - purple/blue
+                        ref_img[:50, :, 1] = 50
+                        ref_img[:50, :, 2] = 150
+                        ref_img[50:, :, 0] = 200  # Eosin - pink
+                        ref_img[50:, :, 1] = 100
+                        ref_img[50:, :, 2] = 100
+                    
+                    # First apply normalization to get the normalized image
+                    norm_img = normalize_histopathology_image(
+                        resized_np,
+                        reference_image=ref_img,
+                        method=stain_method
+                    )
+                    
+                    # Then use the visualization function
+                    vis_fig = visualize_normalization(
+                        resized_np,  # original
+                        norm_img,    # normalized
+                        target=ref_img  # reference target
+                    )
+                    
+                    # Save the visualization
+                    vis_path = save_dir / "stain_normalization_comparison.png"
+                    vis_fig.savefig(vis_path)
+                    plt.close(vis_fig)
+                    logger.info(f"Saved stain normalization comparison to {vis_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to create normalization visualization: {e}")
             
             # Initialize the appropriate normalizer
             if stain_method.lower() == "macenko":
@@ -244,11 +330,49 @@ def create_enhanced_edge_map(image_path, low_threshold=30, high_threshold=120, t
                 
             # Use the normalizer directly if initialized
             if stain_method.lower() in ["macenko", "reinhard"]:
-                if reference_image is not None:
+                # If no reference image is provided, create a synthetic one
+                if reference_image is None:
+                    logger.info("Creating synthetic reference image for stain normalization")
+                    # Create a larger synthetic reference image 
+                    # with colors better suited for H&E staining
+                    synthetic_reference = np.zeros((target_size, target_size, 3), dtype=np.uint8)
+                    
+                    # First half - Hematoxylin-like (purple/blue)
+                    synthetic_reference[:target_size//2, :, 0] = 145  # R - more blue
+                    synthetic_reference[:target_size//2, :, 1] = 60   # G - less green
+                    synthetic_reference[:target_size//2, :, 2] = 170  # B - more blue
+                    
+                    # Second half - Eosin-like (pink)
+                    synthetic_reference[target_size//2:, :, 0] = 210  # R - more red
+                    synthetic_reference[target_size//2:, :, 1] = 120  # G - medium green
+                    synthetic_reference[target_size//2:, :, 2] = 130  # B - medium blue
+                    
+                    # Add some texture/variation to make it more realistic
+                    noise = np.random.randint(-20, 20, synthetic_reference.shape, dtype=np.int16)
+                    synthetic_reference = np.clip(synthetic_reference.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+                    
+                    # Save synthetic reference if intermediates are requested
+                    if save_intermediates and save_dir:
+                        ref_path = save_dir / "synthetic_reference.png"
+                        Image.fromarray(synthetic_reference).save(ref_path)
+                        logger.info(f"Saved synthetic reference to {ref_path}")
+                    
+                    # Fit the normalizer to the synthetic reference
+                    try:
+                        normalizer.fit(synthetic_reference)
+                    except Exception as e:
+                        logger.error(f"Failed to fit normalizer on synthetic reference: {e}")
+                        raise
+                else:
                     # Fit the normalizer to the reference image
                     normalizer.fit(reference_image)
+                
                 # Transform the target image
-                normalized_np = normalizer.transform(resized_np)
+                try:
+                    normalized_np = normalizer.transform(resized_np)
+                except Exception as e:
+                    logger.error(f"Failed to transform image with normalizer: {e}")
+                    normalized_np = resized_np  # Fallback to unnormalized image
             
             # Save intermediate normalized image if requested
             if save_intermediates and save_dir:
@@ -317,29 +441,40 @@ def create_enhanced_edge_map(image_path, low_threshold=30, high_threshold=120, t
 
 def setup_multicontrolnet_pipeline(args):
     """Set up a pipeline with multiple ControlNet models"""
-    # Check for GPU
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    logger.info(f"Using device: {device}")
+    # Force CUDA if available, regardless of detection
+    if torch.cuda.is_available():
+        device = "cuda"
+        logger.info(f"CUDA is available. Using GPU: {torch.cuda.get_device_name(0)}")
+        logger.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    else:
+        device = "cpu"
+        logger.warning("CUDA not available. Using CPU - this will be slow!")
     
     # Set up parameters
     torch_dtype = torch.float16 if device == "cuda" else torch.float32
     
-    # Load multiple ControlNet models
+    # Load canny ControlNet model
     canny_controlnet = ControlNetModel.from_pretrained(
         "lllyasviel/sd-controlnet-canny",
         torch_dtype=torch_dtype
     )
     
-    # Choose a second ControlNet (e.g., depth)
-    depth_controlnet = ControlNetModel.from_pretrained(
-        "lllyasviel/sd-controlnet-depth",
-        torch_dtype=torch_dtype
-    )
+    # If reference image is provided, load a second ControlNet
+    if hasattr(args, 'use_multi_controlnet') and args.use_multi_controlnet:
+        # Load depth ControlNet as secondary control
+        depth_controlnet = ControlNetModel.from_pretrained(
+            "lllyasviel/sd-controlnet-depth",
+            torch_dtype=torch_dtype
+        )
+        # Combine into MultiControlNet
+        controlnet = MultiControlNetModel([canny_controlnet, depth_controlnet])
+        logger.info("Using MultiControlNet with Canny and Depth models")
+    else:
+        # Use only one ControlNet model
+        controlnet = canny_controlnet
+        logger.info("Using single ControlNet (Canny)")
     
-    # Combine into MultiControlNet
-    controlnet = MultiControlNetModel([canny_controlnet, depth_controlnet])
-    
-    # Load pipeline with multiple ControlNets
+    # Load pipeline with ControlNet
     pipeline = StableDiffusionControlNetPipeline.from_pretrained(
         args.base_model,
         controlnet=controlnet,
@@ -349,15 +484,47 @@ def setup_multicontrolnet_pipeline(args):
     
     # Load LoRA weights if specified
     if args.lora_model:
-        try:
-            logger.info(f"Loading LoRA adapter: {args.lora_model}")
-            pipeline.load_lora_weights(args.lora_model)
-            pipeline.fuse_lora(lora_scale=args.lora_scale)
-            logger.info(f"LoRA adapter loaded with scale {args.lora_scale}")
-        except Exception as e:
-            logger.error(f"Failed to load LoRA weights: {e}")
-            logger.error(traceback.format_exc())
+        lora_file_path = args.lora_model
+        logger.info(f"Loading LoRA adapter from: {lora_file_path}")
+        if not os.path.exists(lora_file_path):
+            logger.error(f"LoRA file not found: {lora_file_path}")
             logger.warning("Proceeding without LoRA weights")
+        else:
+            logger.info(f"LoRA file exists: {os.path.exists(lora_file_path)}, size: {os.path.getsize(lora_file_path)} bytes")
+            try:
+                # Use the standard diffusers method for loading local LoRA weights
+                # This handles both .safetensors and other formats if PEFT is installed
+                # It expects the file path directly.
+                pipeline.load_lora_weights(
+                    pretrained_model_name_or_path_or_dict=os.path.dirname(lora_file_path), 
+                    weight_name=os.path.basename(lora_file_path), 
+                    # adapter_name="default" # Optionally provide an adapter name
+                )
+                
+                # Fuse/apply LoRA weights with scale
+                # fuse_lora might be deprecated or behaviour changed; unet.set_adapters might be preferred
+                try:
+                     pipeline.fuse_lora(lora_scale=args.lora_scale)
+                     logger.info(f"LoRA adapter '{os.path.basename(lora_file_path)}' fused with scale {args.lora_scale}")
+                except AttributeError:
+                     # Newer diffusers might use set_adapters for scaling
+                     # pipeline.unet.set_adapters(["default"], adapter_weights=[args.lora_scale])
+                     # pipeline.set_adapters(["default"], adapter_weights={"default": args.lora_scale}) # Check correct syntax
+                     logger.warning("pipeline.fuse_lora() not available. LoRA scale might not be applied directly during fusion.")
+                     logger.info("You might need to adjust scaling during inference if using set_adapters.")
+                     # For simplicity, we'll rely on the loading itself and log a warning.
+                     # If scaling issues arise, revisit diffusers docs for the specific version.
+                except Exception as fuse_error:
+                    logger.error(f"Error during LoRA fusion: {fuse_error}")
+                    logger.warning("Proceeding with potentially unscaled LoRA weights.")
+
+            except ImportError as import_err:
+                 logger.error(f"Import error during LoRA loading (possibly missing 'peft'): {import_err}")
+                 logger.warning("Proceeding without LoRA weights. Install PEFT (`pip install peft`) for full LoRA support.")
+            except Exception as e:
+                logger.error(f"Failed to load LoRA weights from {lora_file_path}: {e}")
+                logger.error(traceback.format_exc())
+                logger.warning("Proceeding without LoRA weights")
     
     # Set up scheduler
     if args.scheduler == "unipc":
@@ -373,9 +540,9 @@ def setup_multicontrolnet_pipeline(args):
         pipeline.scheduler = EulerDiscreteScheduler.from_config(pipeline.scheduler.config)
         logger.info("Using Euler Discrete scheduler")
     
-    # Set up memory optimizations
+    # Skip CPU offload if we're using CUDA
     if device == "cuda":
-        pipeline.enable_model_cpu_offload()
+        pipeline = pipeline.to(device)
         
         try:
             pipeline.enable_attention_slicing()
@@ -385,13 +552,18 @@ def setup_multicontrolnet_pipeline(args):
         
         try:
             # Attempt to enable xformers, but handle the case where it's not available
+            # or fails due to incompatibility
             pipeline.enable_xformers_memory_efficient_attention()
             logger.info("Enabled xFormers memory efficient attention")
-        except (ImportError, ModuleNotFoundError, AttributeError) as e:
-            logger.warning(f"Could not enable xFormers: {e}")
-            logger.info("Continuing without xFormers optimization")
+        except Exception as e: # Catch a broader range of exceptions
+            logger.warning(f"Could not enable xFormers: {type(e).__name__} - {e}")
+            logger.info("Continuing without xFormers optimization. This is often due to version incompatibility.")
+            logger.info("Check xformers documentation for compatibility with your PyTorch/CUDA version or reinstall if necessary.")
+            # Example: pip uninstall xformers && pip install xformers
     else:
-        pipeline = pipeline.to(device)
+        # Only if CUDA not available
+        pipeline.enable_model_cpu_offload()
+        logger.warning("Using CPU offload - generation will be very slow")
     
     logger.info("Pipeline set up complete")
     return pipeline
@@ -466,9 +638,19 @@ def main():
         try:
             logger.info(f"Loading stain reference image: {args.reference_image}")
             reference_image = np.array(Image.open(args.reference_image).convert('RGB'))
+            
+            # Enable multi-controlnet if reference image is provided and not explicitly disabled
+            if not hasattr(args, 'use_multi_controlnet'):
+                args.use_multi_controlnet = True
+                logger.info("Automatically enabling multi-controlnet with reference image")
         except Exception as e:
             logger.error(f"Failed to load reference image: {e}")
             logger.warning("Proceeding without stain normalization reference")
+            args.use_multi_controlnet = False
+    else:
+        if args.use_multi_controlnet:
+            logger.warning("Multi-controlnet requested but no reference image provided. Disabling multi-controlnet.")
+            args.use_multi_controlnet = False
     
     try:
         # Process conditioning image with stain normalization
@@ -525,15 +707,28 @@ def main():
             
             logger.info(f"Generating image {i+1}/{args.num_images} with seed {seeds[i]}")
             
-            # Run inference
+            # Only use control images that are not None
+            control_images = [canny_image]
+            
+            # Set up ControlNet conditioning scale
+            if args.use_multi_controlnet and reference_image is not None:
+                # Convert numpy array to PIL Image for the pipeline
+                reference_pil = Image.fromarray(reference_image)
+                control_images.append(reference_pil)
+                # Use a list of scales for multi-controlnet
+                controlnet_scales = [controlnet_scale, controlnet_scale * 0.5]  # Lower scale for second control
+            else:
+                # Single scale for single controlnet
+                controlnet_scales = controlnet_scale
+                
             image = pipeline(
                 prompt=prompt,
                 negative_prompt=args.negative_prompt,
-                image=[canny_image, reference_image],
+                image=control_images,
                 num_inference_steps=args.steps,
                 generator=generator,
                 guidance_scale=args.guidance_scale,
-                controlnet_conditioning_scale=controlnet_scale
+                controlnet_conditioning_scale=controlnet_scales
             ).images[0]
             
             all_images.append(image)
