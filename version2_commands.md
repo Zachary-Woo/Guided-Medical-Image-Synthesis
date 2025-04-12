@@ -11,11 +11,13 @@ python version2/scripts/enhanced_controlnet_v2.py --condition_image data/pathmni
 # Generate multiple images with a specific seed
 python version2/scripts/enhanced_controlnet_v2.py --condition_image data/pathmnist_samples/sample_0000.png --num_images 4 --seed 42
 
-# Use LoRA (Corrected Path)
+# Use LoRA (Base)
 python version2/scripts/enhanced_controlnet_v2.py --condition_image data/pathmnist_samples/sample_0000.png --lora_model version2/models/lora/medical_lora.safetensors --lora_scale 0.8
 
+# Use LoRA (Custom Trained)
+python version2/scripts/enhanced_controlnet_v2.py --condition_image data/pathmnist_samples/sample_0000.png --lora_model version2/models/lora_histopathology/adapter_model.safetensors --lora_scale 0.8
 
-# --- Using the Main Script (main.py) ---
+# --- Using the Main Script (main.py) --- # Custom Trained LoRA Model: version2/models/lora_histopathology/adapter_model.safetensors
 
 # Run enhanced generation through main.py (Corrected Command Name)
 python version2/main.py generate --condition_image data/pathmnist_samples/sample_0000.png --stain_norm macenko

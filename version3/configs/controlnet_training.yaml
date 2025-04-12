@@ -1,0 +1,87 @@
+# ControlNet Training Configuration
+
+# Base model settings
+model:
+  pretrained_model_name_or_path: "runwayml/stable-diffusion-v1-5"  # Base model to use
+  controlnet_model_name_or_path: null  # Optional existing ControlNet to continue training
+  vae_model_name_or_path: null  # Optional custom VAE, null to use the one from base model
+  resolution: 512  # Training resolution
+  dtype: "float16"  # Model precision: float32, float16, bfloat16
+
+# ControlNet parameters
+controlnet:
+  conditioning_scale: 1.0  # Scale factor for conditioning
+  conditioning_embedding_channels: 16  # Channels for conditioning embeddings
+  conditioning_scale_factor: 1.0  # Scale factor for conditioning input
+  encoder_only: false  # Whether to only train the encoder
+  use_simplified_conditioning: false  # Use simplified conditioning
+  conditioning_type: "segmentation"  # Type of conditioning: segmentation, depth, canny, etc.
+  init_weights_from_controlnet: null  # Path to existing ControlNet to initialize weights from
+  freeze_encoder: false  # Whether to freeze encoder
+
+# Dataset configuration
+dataset:
+  train_data_dir: "data/processed/brats/train"  # Directory with training data
+  val_data_dir: "data/processed/brats/val"  # Directory with validation data
+  conditioning_data_dir: "data/processed/brats/segmentations"  # Directory with conditioning data
+  caption_column: "caption"  # Column name in dataset for captions
+  image_column: "image"  # Column name in dataset for images
+  conditioning_column: "segmentation"  # Column name for conditioning data
+  center_crop: true  # Whether to center crop images
+  random_flip: true  # Whether to randomly flip images
+  train_validation_split: 0.05  # Percentage of data to use for validation
+  conditioning_image_transforms: 
+    - "normalize"  # Transforms to apply to conditioning images
+  validation_prompt: "high-quality MRI scan of a brain, detailed medical imaging"
+  validation_images: 4  # Number of validation images to generate
+  validation_epochs: 5  # Validate every N epochs
+  num_validation_images: 4  # Number of validation images to use
+
+# Training parameters
+training:
+  seed: 42  # Random seed
+  output_dir: "models/brats_controlnet"  # Directory to save model
+  max_train_steps: 10000  # Maximum number of training steps
+  train_batch_size: 2  # Batch size for training
+  gradient_accumulation_steps: 8  # Gradient accumulation steps
+  checkpointing_steps: 500  # Save a checkpoint every N steps
+  resume_from_checkpoint: null  # Path to checkpoint to resume from, null for none
+  validation_steps: 500  # Run validation every N steps
+  max_grad_norm: 1.0  # Maximum gradient norm for gradient clipping
+  dataloader_num_workers: 8  # Number of workers for data loading
+  
+# Optimizer settings
+optimizer:
+  learning_rate: 1.0e-5  # Learning rate
+  scale_lr: false  # Scale learning rate by batch size, gradient accumulation, and GPUs
+  lr_scheduler: "cosine"  # Learning rate scheduler: constant, cosine, cosine_with_restarts, polynomial, constant_with_warmup
+  lr_warmup_steps: 500  # Number of warmup steps for learning rate scheduler
+  adam_beta1: 0.9  # Beta1 for Adam optimizer
+  adam_beta2: 0.999  # Beta2 for Adam optimizer
+  adam_weight_decay: 0.01  # Weight decay for Adam optimizer
+  adam_epsilon: 1.0e-8  # Epsilon for Adam optimizer
+
+# Performance settings
+performance:
+  mixed_precision: "fp16"  # Mixed precision mode: no, fp16, bf16
+  gradient_checkpointing: true  # Whether to use gradient checkpointing
+  enable_xformers_memory_efficient_attention: true  # Use xformers for memory-efficient attention
+  use_deepspeed: false  # Use DeepSpeed for training
+  use_8bit_adam: true  # Use 8-bit Adam for parameter reduction
+  report_to: "tensorboard"  # Platform to report results to: tensorboard, wandb, none
+  
+# Advanced settings
+advanced:
+  non_ema_revision: null  # Revision of pretrained non-EMA model
+  prediction_type: null  # Prediction type for model, null to use default
+  noise_offset: 0.0  # Offset added to noise
+  snr_gamma: null  # SNR gamma, null to disable
+  prior_generation_precision: null  # Precision for prior generation
+  cache_latents: true  # Whether to cache latents
+  pre_compute_text_embeddings: false  # Whether to pre-compute text embeddings
+  pad_tokens: false  # Whether to pad tokens
+
+# System settings
+system:
+  allow_tf32: true  # Allow TF32 precision on Ampere GPUs
+  logging_dir: "logs/controlnet_training"  # Directory for logs 

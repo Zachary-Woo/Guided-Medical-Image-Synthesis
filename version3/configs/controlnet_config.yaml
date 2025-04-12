@@ -1,0 +1,74 @@
+# ControlNet Configuration File
+# This file contains settings for training a ControlNet model for MRI generation
+
+# Model settings
+model:
+  base_model_id: "stabilityai/stable-diffusion-2-1-base"  # Base model to use
+  revision: "main"  # Model revision
+  controlnet_model_id: null  # Set to path if loading pretrained ControlNet, null to create new one
+
+# Dataset settings
+dataset:
+  data_dir: "data/processed_brats"  # Directory containing processed BraTS data
+  conditioning_dir: "segmentations"  # Subdirectory for conditioning images (segmentations)
+  images_dir: "images"  # Subdirectory for target images (MRIs)
+  prompt_template: "MRI brain scan showing {condition}"  # Template for generating prompts
+  prompt_conditions:  # List of possible conditions to insert in the template
+    - "glioblastoma in the frontal lobe"
+    - "meningioma in the temporal lobe"
+    - "tumor with surrounding edema"
+    - "metastatic lesion"
+    - "astrocytoma with mass effect"
+    - "oligodendroglioma"
+    - "healthy tissue"
+  use_image_names_as_captions: false  # Whether to use image filenames as captions
+  modality: "t1ce"  # MRI modality to use (t1, t1ce, t2, flair)
+  text_prompt_file: null  # Optional file containing custom text prompts
+
+# Training settings
+training:
+  seed: 42  # Random seed for reproducibility
+  resolution: 512  # Image resolution for training
+  center_crop: true  # Whether to center crop images
+  train_batch_size: 4  # Batch size for training
+  gradient_accumulation_steps: 1  # Number of steps to accumulate gradients
+  max_train_steps: 10000  # Maximum number of training steps
+  checkpointing_steps: 500  # Save checkpoint every N steps
+  validation_steps: 200  # Run validation every N steps
+  
+  # Learning rate settings
+  learning_rate: 1.0e-5  # Initial learning rate
+  lr_scheduler: "constant"  # Learning rate scheduler (constant, linear, cosine, cosine_with_restarts)
+  lr_warmup_steps: 0  # Warmup steps for learning rate
+  
+  # Optimizer settings
+  adam_beta1: 0.9  # Adam beta1
+  adam_beta2: 0.999  # Adam beta2
+  adam_weight_decay: 1.0e-2  # Adam weight decay
+  adam_epsilon: 1.0e-8  # Adam epsilon
+  max_grad_norm: 1.0  # Maximum gradient norm
+  
+  # Precision settings
+  mixed_precision: "fp16"  # Mixed precision type (no, fp16, bf16)
+  use_8bit_adam: false  # Whether to use 8-bit Adam
+  
+  # Model settings
+  train_only_controlnet: true  # Whether to train only ControlNet or both ControlNet and UNet
+  save_inference_pipeline: true  # Whether to save a pipeline for inference
+  enable_xformers: true  # Whether to use xFormers for memory optimization
+
+# Logging settings
+logging:
+  log_with: "tensorboard"  # Logging tool (tensorboard, wandb, all)
+  project_name: "controlnet-mri"  # Project name for logging
+  logging_dir: "logs"  # Directory for logs
+
+# Output settings
+output:
+  output_dir: "models/controlnet"  # Directory to save model checkpoints
+  save_model_as: "safetensors"  # Format to save model (safetensors, diffusers)
+
+# System settings
+system:
+  enable_tf32: true  # Whether to enable TF32 on Ampere GPUs
+  enable_torch_compile: false  # Whether to enable torch.compile 

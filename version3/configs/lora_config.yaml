@@ -1,0 +1,104 @@
+# LoRA Fine-Tuning Configuration
+
+# Base model settings
+model:
+  base_model_id: "stabilityai/stable-diffusion-2-1-base"
+  revision: "main"
+  from_single_file: false  # Set to true if loading from .safetensors or .ckpt file
+  controlnet_model_id: null  # Set to a controlnet model ID if using ControlNet during training
+
+# LoRA settings
+lora:
+  r: 16  # LoRA rank
+  alpha: 32  # LoRA alpha
+  target_modules: 
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "out_proj"
+    - "to_q"
+    - "to_k"
+    - "to_v"
+    - "to_out.0"
+    - "ff.net.0.proj"
+    - "ff.net.2"
+  dropout: 0.0
+  bias: "none"  # Options: "none", "all", "lora_only"
+  scale_embeddings: true  # Apply learning rate to embeddings
+  scale_weight: 1.0  # Weight of the LoRA scaling factor
+
+# Training settings
+training:
+  seed: 42
+  resolution: 512
+  center_crop: true
+  random_flip: true
+  train_batch_size: 2
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
+  max_train_steps: 10000
+  checkpointing_steps: 500
+  validation_steps: 100
+  learning_rate: 0.0001
+  scale_lr: false
+  lr_scheduler: "cosine"  # Options: "linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"
+  lr_warmup_steps: 0
+  use_8bit_adam: true
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_weight_decay: 0.01
+  adam_epsilon: 1.0e-08
+  max_grad_norm: 1.0
+  mixed_precision: "fp16"  # Options: "no", "fp16", "bf16"
+  enable_cpu_offload_for_validation: true
+  
+# Dataset settings
+dataset:
+  data_dir: "data/processed_brats"
+  train_data_split: 0.95
+  val_data_split: 0.05
+  shuffle_train: true
+  train_images_dir: "images"  # Directory containing training images (relative to data_dir)
+  max_train_samples: null  # Set to an integer to limit training samples
+  max_val_samples: 4  # Number of validation samples to use
+  prompt_template: "MRI brain scan showing {condition}"
+  prompt_conditions:
+    - "healthy tissue"
+    - "brain tumor with edema"
+    - "necrotic tumor core" 
+    - "enhancing tumor"
+    - "hemorrhage"
+    - "glioblastoma" 
+    - "meningioma"
+  use_image_names_as_captions: false  # If true, will extract prompts from image filenames
+  instance_prompt: "MRI brain scan"
+  class_prompt: "brain scan"
+
+# Text Encoder settings
+text_encoder:
+  train_text_encoder: true
+  text_encoder_lr: 5.0e-5
+
+# Logging settings
+logging:
+  log_with: ["tensorboard"]  # Options: "tensorboard", "wandb"
+  project_name: "lora-mri"
+  run_name: null  # If null, will generate a name based on date and time
+  logging_dir: "logs"
+  enable_progress_bar: true
+  report_to: "tensorboard"
+
+# Output settings
+output:
+  output_dir: "models/lora"
+  overwrite_output_dir: false
+  save_model_as: "safetensors"  # Options: "safetensors", "peft", "diffusers"
+  push_to_hub: false
+  hub_model_id: null
+  hub_token: null
+
+# System settings
+system:
+  allow_tf32: true
+  enable_validation_during_training: true
+  validation_images_count: 4 

@@ -1,0 +1,84 @@
+# LoRA Training Configuration
+
+# Base model settings
+model:
+  base_model_id: "runwayml/stable-diffusion-v1-5"  # Base model to fine-tune
+  vae_model_id: null  # Optional custom VAE, null to use the one from base model
+  resolution: 512  # Training resolution
+  dtype: "float16"  # Model precision: float32, float16, bfloat16
+
+# LoRA parameters
+lora:
+  rank: 32  # LoRA rank (dimensionality)
+  alpha: 32  # LoRA alpha parameter (scaling)
+  dropout: 0.1  # Dropout rate during training
+  target_modules: null  # Target modules to apply LoRA to, null for auto-detection
+  train_text_encoder: true  # Whether to train text encoder LoRA
+  text_encoder_lr: 5.0e-5  # Learning rate for text encoder
+  unet_lr: 1.0e-4  # Learning rate for UNet
+
+# Dataset configuration
+dataset:
+  train_data_dir: "data/processed/brats/train"  # Directory with training data
+  val_data_dir: "data/processed/brats/val"  # Directory with validation data
+  instance_prompt: "MRI scan of a brain"  # Primary training prompt
+  class_prompt: "MRI scan"  # Class prompt (for prior preservation)
+  caption_column: "caption"  # Column name in dataset for captions
+  image_column: "image"  # Column name in dataset for images
+  center_crop: true  # Whether to center crop images
+  random_flip: true  # Whether to randomly flip images
+  class_data_dir: null  # Directory with class images (for prior preservation)
+  use_class_images: false  # Whether to use class images
+  class_sample_percentage: 0.2  # Percentage of class images to use
+  validation_prompt: "high-quality MRI scan of a brain, detailed medical imaging"
+  validation_epochs: 1  # Validate every N epochs
+
+# Training parameters
+training:
+  seed: 42  # Random seed
+  output_dir: "models/brats_lora"  # Directory to save model
+  max_train_steps: 1000  # Maximum number of training steps
+  train_batch_size: 4  # Batch size for training
+  gradient_accumulation_steps: 4  # Gradient accumulation steps
+  checkpointing_steps: 200  # Save a checkpoint every N steps
+  resume_from_checkpoint: null  # Path to checkpoint to resume from, null for none
+  validation_steps: 100  # Run validation every N steps
+  max_grad_norm: 1.0  # Maximum gradient norm for gradient clipping
+  dataloader_num_workers: 4  # Number of workers for data loading
+  
+# Optimizer settings
+optimizer:
+  learning_rate: 1.0e-4  # Learning rate
+  scale_lr: false  # Scale learning rate by batch size, gradient accumulation, and GPUs
+  lr_scheduler: "constant"  # Learning rate scheduler: constant, cosine, cosine_with_restarts, polynomial, constant_with_warmup
+  lr_warmup_steps: 100  # Number of warmup steps for learning rate scheduler
+  use_8bit_adam: true  # Whether to use 8-bit Adam optimizer
+  adam_beta1: 0.9  # Beta1 for Adam optimizer
+  adam_beta2: 0.999  # Beta2 for Adam optimizer
+  adam_weight_decay: 0.01  # Weight decay for Adam optimizer
+  adam_epsilon: 1.0e-8  # Epsilon for Adam optimizer
+
+# Performance settings
+performance:
+  mixed_precision: "fp16"  # Mixed precision mode: no, fp16, bf16
+  gradient_checkpointing: true  # Whether to use gradient checkpointing
+  enable_xformers_memory_efficient_attention: true  # Use xformers for memory-efficient attention
+  use_deepspeed: false  # Use DeepSpeed for training
+  use_8bit_adam: true  # Use 8-bit Adam for parameter reduction
+  report_to: "tensorboard"  # Platform to report results to: tensorboard, wandb, none
+  
+# Advanced settings
+advanced:
+  noise_offset: 0.0  # Offset added to noise
+  prediction_type: null  # Prediction type for model, null to use default
+  prior_generation_precision: null  # Precision for prior generation
+  prior_loss_weight: 1.0  # Weight for prior preservation loss
+  cache_latents: true  # Whether to cache latents
+  pre_compute_text_embeddings: false  # Whether to pre-compute text embeddings
+  clip_skip: null  # Number of layers to skip in CLIP (for SD 1.x)
+  max_token_length: null  # Maximum token length for text encoder, null to use default
+
+# System settings
+system:
+  allow_tf32: true  # Allow TF32 precision on Ampere GPUs
+  logging_dir: "logs/lora_training"  # Directory for logs 

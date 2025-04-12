@@ -1,0 +1,69 @@
+# MRI Generation Configuration
+
+# Base model settings
+model:
+  base_model_id: "runwayml/stable-diffusion-v1-5"  # Base Stable Diffusion model
+  controlnet_model_id: "lllyasviel/control_v11p_sd15_seg"  # ControlNet for segmentation maps
+  lora_model_path: "models/brats_lora"  # Path to fine-tuned LoRA adapter
+  vae_model_id: null  # Optional custom VAE, null to use the one from base model
+  scheduler: "euler"  # Scheduler type: ddim, pndm, euler, dpm_solver_multistep
+  dtype: "float16"  # Model precision: float32, float16, bfloat16
+
+# Generation parameters
+generation:
+  prompt: "MRI scan of a brain, realistic detailed medical imaging, high-resolution, t1 sequence"
+  negative_prompt: "blurry, distorted, low quality, low resolution, ugly, deformed, cartoon, animated, disfigured, text, watermark"
+  num_inference_steps: 30
+  guidance_scale: 7.5
+  width: 512
+  height: 512
+  seed: null  # Random seed, null for random
+  lora_scale: 0.8  # Scale factor for LoRA adapter
+  num_images_per_prompt: 1
+  controlnet_conditioning_scale: 1.0
+  
+# Input/Output settings
+io:
+  input_segmentation_path: "data/segmentation_maps"  # Directory with segmentation maps
+  output_dir: "output/generated_mri"  # Directory to save generated images
+  save_intermediate: false  # Whether to save intermediate images during generation
+  file_format: "png"  # Output file format (png, jpg, npy)
+  metadata: true  # Whether to save generation metadata
+
+# Performance settings
+performance:
+  device: "cuda"  # Device to use (cuda, cpu, mps)
+  optimization_level: "default"  # Optimization level (default, speed, memory)
+  batch_size: 1  # Batch size for generation
+  use_attention_slicing: true
+  use_xformers: true  # Use xformers for memory efficient attention
+  use_compile: false  # Use torch.compile for model compilation (requires PyTorch 2.0+)
+
+# Preprocessing settings
+preprocessing:
+  normalize_input: true  # Whether to normalize input
+  resize_method: "bilinear"  # Resize method (nearest, bilinear, bicubic)
+  segmap_color_mode: "rgb"  # Color mode for segmentation maps (rgb, grayscale)
+
+# Post-processing settings
+postprocessing:
+  apply_gaussian_filter: false  # Apply Gaussian filter to output
+  gaussian_sigma: 0.5  # Sigma for Gaussian filter
+  apply_histogram_matching: false  # Apply histogram matching to output
+  denoise: false  # Apply denoising to output
+
+# Specialized MRI settings
+mri_specific:
+  modality: "t1"  # MRI modality (t1, t2, flair, etc.)
+  add_noise: false  # Add realistic MRI noise
+  simulate_artifacts: false  # Simulate MRI artifacts (motion, aliasing, etc.)
+  simulate_field_inhomogeneity: false  # Simulate bias field
+  orientation: "axial"  # Image orientation (axial, sagittal, coronal)
+  
+# Experimental settings
+experimental:
+  use_diffusion_prior: false  # Use diffusion prior model
+  use_img2img: false  # Use img2img mode instead of txt2img
+  img2img_strength: 0.8  # Denoising strength for img2img
+  use_ip_adapter: false  # Use image prompt adapter
+  ip_adapter_scale: 0.5  # Scale for IP adapter 
