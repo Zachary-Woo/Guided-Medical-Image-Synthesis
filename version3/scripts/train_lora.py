@@ -22,7 +22,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.utils.data import Dataset, DataLoader
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, CLIPTextModel
 
 from diffusers import (
     AutoencoderKL,
@@ -225,9 +225,12 @@ def main():
     noise_scheduler = DDPMScheduler.from_pretrained(args.base_model, subfolder="scheduler")
     vae = AutoencoderKL.from_pretrained(args.base_model, subfolder="vae")
     unet = UNet2DConditionModel.from_pretrained(args.base_model, subfolder="unet")
+    # Load text encoder
+    text_encoder = CLIPTextModel.from_pretrained(args.base_model, subfolder="text_encoder")
     
-    # Freeze VAE
+    # Freeze VAE and Text Encoder
     vae.requires_grad_(False)
+    text_encoder.requires_grad_(False)
     
     # Configure LoRA
     lora_config = LoraConfig(
@@ -317,8 +320,9 @@ def main():
         unet, optimizer, train_dataloader, lr_scheduler
     )
     
-    # Keep VAE on CPU or GPU depending on batch size
+    # Keep VAE and Text Encoder on device but don't prepare them with accelerator
     vae.to(accelerator.device, dtype=torch.float32)
+    text_encoder.to(accelerator.device)
     
     # Initialize trackers
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -394,8 +398,9 @@ def main():
                 # Add noise to the latents according to the noise magnitude at the timestep
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
                 
-                # Get the text embeddings
-                encoder_hidden_states = batch["input_ids"]
+                # Get the text embeddings using the text encoder
+                with torch.no_grad(): # Text encoder is frozen
+                    encoder_hidden_states = text_encoder(batch["input_ids"])[0]
                 
                 # Predict the noise residual with the unet
                 noise_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample

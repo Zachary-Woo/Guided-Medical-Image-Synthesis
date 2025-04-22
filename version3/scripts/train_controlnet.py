@@ -22,7 +22,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.utils.data import Dataset, DataLoader
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, CLIPTextModel
 
 from diffusers import (
     AutoencoderKL,
@@ -246,14 +246,17 @@ def main():
     noise_scheduler = DDPMScheduler.from_pretrained(args.base_model, subfolder="scheduler")
     vae = AutoencoderKL.from_pretrained(args.base_model, subfolder="vae")
     unet = UNet2DConditionModel.from_pretrained(args.base_model, subfolder="unet")
+    # Load Text Encoder
+    text_encoder = CLIPTextModel.from_pretrained(args.base_model, subfolder="text_encoder")
     
     # Load ControlNet
     logger.info(f"Loading ControlNet from {args.controlnet_model}")
     controlnet = ControlNetModel.from_pretrained(args.controlnet_model)
     
-    # Freeze VAE and UNet
+    # Freeze VAE, UNet and Text Encoder
     vae.requires_grad_(False)
     unet.requires_grad_(False)
+    text_encoder.requires_grad_(False)
     
     # Make sure ControlNet is trainable
     controlnet.train()
@@ -329,9 +332,10 @@ def main():
         controlnet, optimizer, train_dataloader, lr_scheduler
     )
     
-    # Keep VAE and UNet on device but we don't want to optimize them
+    # Keep VAE, UNet and Text Encoder on device but we don't want to optimize them
     unet = accelerator.prepare(unet)
     vae.to(accelerator.device, dtype=torch.float32)
+    text_encoder.to(accelerator.device)
     
     # Initialize trackers
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -409,8 +413,9 @@ def main():
                 # Add noise to the latents according to the noise magnitude at the timestep
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
                 
-                # Get the text embeddings
-                encoder_hidden_states = batch["input_ids"]
+                # Get the text embeddings using the text encoder
+                with torch.no_grad(): # Text encoder is frozen
+                    encoder_hidden_states = text_encoder(batch["input_ids"])[0]
                 
                 # Get the ControlNet conditioning
                 down_block_res_samples, mid_block_res_sample = controlnet(

@@ -75,26 +75,20 @@ def find_brats_patients(brats_path):
     if not brats_path.exists():
         raise FileNotFoundError(f"BraTS path not found: {brats_path}")
     
-    # Try to handle different BraTS dataset structures
-    
-    # BraTS 2023 folder structure
-    patient_dirs = list(brats_path.glob("*/*"))
-    
-    # If nothing found, try BraTS 2020/2021 folder structure
-    if not patient_dirs:
-        patient_dirs = list(brats_path.glob("*"))
-    
-    # Filter to only include directories
-    patient_dirs = [d for d in patient_dirs if d.is_dir()]
+    # Directly look for patient folders inside the provided path
+    patient_dirs = [d for d in brats_path.glob("*") if d.is_dir()]
     
     # Make sure we have directories with expected files
     valid_patients = []
     for patient_dir in patient_dirs:
         # Check for presence of image files (different naming conventions by year)
-        has_t1 = any(patient_dir.glob("*t1.nii.gz")) or any(patient_dir.glob("*T1.nii.gz"))
-        has_seg = any(patient_dir.glob("*seg.nii.gz")) or any(patient_dir.glob("*_seg.nii.gz"))
+        # Look for either .nii or .nii.gz extension
+        has_t1 = any(patient_dir.glob("*t1.nii*")) or any(patient_dir.glob("*T1.nii*"))
+        # BraTS-Reg dataset doesn't have seg files, only check for modality files
+        # has_seg = any(patient_dir.glob("*seg.nii*")) or any(patient_dir.glob("*_seg.nii*"))
         
-        if has_t1 and has_seg:
+        # Only check if at least one T1 file exists for now
+        if has_t1: # Removed 'and has_seg'
             valid_patients.append(patient_dir)
     
     if not valid_patients:
@@ -369,7 +363,7 @@ def process_patient(patient_dir, modality, output_dirs, image_size, include_heal
             "patient_id": patient_dir.name,
             "slice_idx": z_idx,
             "modality": modality,
-            "has_tumor": has_tumor,
+            "has_tumor": bool(has_tumor),
             "tumor_location": tumor_location,
             "tumor_size": tumor_size,
             "image_path": str(slice_path.relative_to(output_dirs["root"])),

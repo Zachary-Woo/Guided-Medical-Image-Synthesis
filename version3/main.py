@@ -88,6 +88,15 @@ def parse_args():
                                  help="Learning rate")
     train_lora_parser.add_argument("--rank", type=int, default=4,
                                  help="LoRA rank")
+    train_lora_parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
+                                 help="Number of gradient accumulation steps")
+    train_lora_parser.add_argument("--mixed_precision", type=str, default="fp16",
+                                 choices=["no", "fp16", "bf16"],
+                                 help="Mixed precision training")
+    train_lora_parser.add_argument("--use_8bit_adam", action="store_true",
+                                 help="Use 8-bit Adam optimizer")
+    train_lora_parser.add_argument("--gradient_checkpointing", action="store_true",
+                                 help="Enable gradient checkpointing")
     
     # Train ControlNet command
     train_controlnet_parser = subparsers.add_parser("train-controlnet", help="Train ControlNet for structure conditioning")
@@ -107,6 +116,13 @@ def parse_args():
                                       help="Number of training epochs")
     train_controlnet_parser.add_argument("--learning_rate", type=float, default=1e-5,
                                       help="Learning rate")
+    train_controlnet_parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
+                                      help="Number of gradient accumulation steps")
+    train_controlnet_parser.add_argument("--mixed_precision", type=str, default="fp16",
+                                      choices=["no", "fp16", "bf16"],
+                                      help="Mixed precision training")
+    train_controlnet_parser.add_argument("--use_8bit_adam", action="store_true",
+                                      help="Use 8-bit Adam optimizer")
     
     # Train SAM2 command
     train_sam2_parser = subparsers.add_parser("train-sam2", help="Fine-tune SAM2 for tumor segmentation")
@@ -158,7 +174,8 @@ def build_command(script_name, args_dict):
     """Build a command list for subprocess, handling None values."""
     cmd = [sys.executable, script_name]
     for key, value in args_dict.items():
-        if value is None:
+        # Skip the 'command' argument itself
+        if key == 'command' or value is None:
             continue
         arg_name = f"--{key}"
         if isinstance(value, bool):

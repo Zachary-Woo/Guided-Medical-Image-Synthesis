@@ -9,16 +9,10 @@ import argparse
 import json
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-from torch.cuda.amp import autocast, GradScaler
 import cv2
-from tqdm import tqdm
 import random
 import nibabel as nib
-from PIL import Image
-import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Configure logging

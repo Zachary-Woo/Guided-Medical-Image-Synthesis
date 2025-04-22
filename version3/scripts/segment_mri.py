@@ -7,7 +7,6 @@ for segmenting brain MRI images. It supports text prompts, point prompts, and bo
 """
 
 import os
-import sys
 import time
 import logging
 import argparse
