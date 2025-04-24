@@ -87,12 +87,45 @@ To generate an MRI with a tumor in a specific location:
 python version3/main.py generate --prompt "T1 weighted axial brain MRI with tumor in left temporal lobe" --create_mask
 ```
 
+You can specify the axial slice level to precisely control what part of the brain is shown:
+
+```bash
+# Generate a slice showing the ventricles
+python version3/main.py generate --prompt "T1 weighted brain MRI with tumor" --create_mask --slice_level ventricles
+
+# Generate a slice through the cerebellum
+python version3/main.py generate --prompt "T1 weighted brain MRI with tumor" --create_mask --slice_level cerebellum
+
+# Available slice levels: superior, mid-axial, inferior, ventricles, basal-ganglia, cerebellum
+```
+
+### Generate and Visualize in a Single Command
+
+You can automatically compare your generated MRIs with real BraTS data as part of the generation process:
+
+```bash
+# Generate and immediately visualize compared to a real BraTS scan
+python version3/main.py generate --prompt "T1 weighted axial brain MRI with tumor in left temporal lobe" \
+    --output_dir output/version3/generated --visualize \
+    --brats_dir data/BraTS2021_Training_Data/BraTS2021_00000 --compare_modality t1
+
+# Generate with auto-created mask and specify slice level
+python version3/main.py generate --prompt "T2 weighted brain MRI with tumor" --create_mask \
+    --slice_level ventricles --visualize \
+    --brats_dir data/BraTS2021_Training_Data/BraTS2021_00000 --compare_modality t2
+
+# Display visualization after generation
+python version3/main.py generate --prompt "MRI with tumor in right frontal lobe" --create_mask \
+    --visualize --brats_dir data/BraTS2021_Training_Data/BraTS2021_00000 --show_visualization
+```
+
 This will:
 1. Parse the prompt to identify the tumor location
-2. Create a segmentation mask appropriate for that location
+2. Create a segmentation mask appropriate for that location (when using --create_mask)
 3. Use the mask with ControlNet to guide the image generation
-4. Apply domain adaptation via LoRA
-5. Save the result to the output directory
+4. Apply domain adaptation via LoRA (if available)
+5. Save the result to the specified output directory
+6. Automatically generate a comparison with real BraTS data (with --visualize flag)
 
 To use a custom mask:
 
@@ -120,7 +153,7 @@ python version3/main.py segment --input_image path/to/mri.png --prompt_type box 
 To fine-tune SAM2 on BraTS dataset to improve tumor segmentation accuracy:
 
 ```bash
-python version3/main.py train-sam2 --brats_path path/to/brats2023 --output_dir version3/models/sam2_finetuned --augmentation
+python version3/main.py train-sam2 --brats_path data/BraTS2021_Training_Data --output_dir version3/models/sam2_finetuned --augmentation
 ```
 
 This will:
@@ -132,13 +165,13 @@ This will:
 For fine-tuning only the mask decoder and prompt encoder (memory efficient):
 
 ```bash
-python version3/main.py train-sam2 --brats_path path/to/brats2023 --max_train_steps 3000
+python version3/main.py train-sam2 --brats_path data/BraTS2021_Training_Data --max_train_steps 3000
 ```
 
 For fine-tuning the entire model including the image encoder (requires more GPU memory):
 
 ```bash
-python version3/main.py train-sam2 --brats_path path/to/brats2023 --train_image_encoder
+python version3/main.py train-sam2 --brats_path data/BraTS2021_Training_Data --train_image_encoder
 ```
 
 ### 4. Preparing BraTS Dataset for Training
@@ -146,7 +179,7 @@ python version3/main.py train-sam2 --brats_path path/to/brats2023 --train_image_
 To prepare the BraTS dataset for training:
 
 ```bash
-python version3/main.py prepare --brats_path path/to/brats2023 --modality t1 --sample_count 1000 --include_healthy
+python version3/main.py prepare --brats_path data/BraTS2021_Training_Data --modality t1 --sample_count 1000 --include_healthy
 ```
 
 This will:
@@ -156,7 +189,6 @@ This will:
 4. Prepare metadata files for LoRA and ControlNet training
 
 ### 5. Training a LoRA Adapter
-
 To train a LoRA adapter for brain MRI domain adaptation:
 
 ```bash
@@ -164,7 +196,6 @@ python version3/main.py train-lora --data_path data/processed_brats --output_dir
 ```
 
 ### 6. Training a ControlNet Model
-
 To train a ControlNet model for mask-conditioned generation:
 
 ```bash
@@ -174,10 +205,9 @@ python version3/main.py train-controlnet --data_path data/processed_brats --outp
 ## Examples
 
 ### Example 1: Complete Pipeline with Fine-tuned SAM2
-
 ```bash
 # 1. First fine-tune SAM2 on BraTS data
-python version3/main.py train-sam2 --brats_path path/to/brats2023 --output_dir version3/models/sam2_finetuned
+python version3/main.py train-sam2 --brats_path data/BraTS2021_Training_Data --output_dir version3/models/sam2_finetuned
 
 # 2. Use it to generate a mask for an existing MRI image
 python version3/main.py segment --input_image sample_mri.png --prompt_type text --prompt "tumor" --sam_model version3/models/sam2_finetuned
@@ -187,16 +217,32 @@ python version3/main.py generate --prompt "T1 weighted axial brain MRI with tumo
 ```
 
 ### Example 2: MRI with Left Temporal Tumor
-
 ```bash
 python version3/main.py generate --prompt "T1 weighted axial brain MRI with tumor in left temporal lobe" --create_mask --seed 42
 ```
-
 ### Example 3: MRI with Right Frontal Tumor
-
 ```bash
 python version3/main.py generate --prompt "T1 weighted axial brain MRI with large tumor in right frontal lobe" --create_mask --seed 123
 ```
+
+### Example 4: Visualizing and Comparing with Real MRI Data
+```bash
+# First, generate an MRI
+python version3/main.py generate --prompt "T1 weighted axial brain MRI with tumor in left temporal lobe" --create_mask --slice_level ventricles
+
+# Then visualize and compare with real BraTS data
+python version3/main.py visualize --generated_dir output/version3/generated/mri_[timestamp] --brats_dir data/BraTS2021_Training_Data/BraTS2021_00000 --modality t1
+
+# Compare to different modalities (T1, T2, FLAIR, T1ce)
+python version3/main.py visualize --generated_dir output/version3/generated/mri_[timestamp] --brats_dir data/BraTS2021_Training_Data/BraTS2021_00000 --modality t2 --show
+```
+
+The visualization creates a side-by-side comparison of:
+1. The conditioning mask used to guide generation
+2. The generated MRI image
+3. A real MRI slice from the BraTS dataset that matches the same slice level
+
+This allows for easy visual comparison between generated and real medical images.
 
 ## Evaluation
 

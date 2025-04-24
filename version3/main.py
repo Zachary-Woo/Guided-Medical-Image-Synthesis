@@ -43,6 +43,8 @@ def parse_args():
                                help="Output directory")
     generate_parser.add_argument("--lora_weights", type=str, default="version3/models/mri_lora",
                                help="Path to LoRA weights directory")
+    generate_parser.add_argument("--base_model", type=str, default="runwayml/stable-diffusion-v1-5",
+                               help="Base model ID")
     generate_parser.add_argument("--seed", type=int, default=42,
                                help="Random seed for reproducibility")
     generate_parser.add_argument("--num_inference_steps", type=int, default=30,
@@ -53,6 +55,36 @@ def parse_args():
                                help="ControlNet conditioning scale")
     generate_parser.add_argument("--create_mask", action="store_true",
                                help="Automatically create a tumor mask based on prompt")
+    generate_parser.add_argument("--slice_level", type=str, default="mid-axial",
+                               choices=["superior", "mid-axial", "inferior", "ventricles", "basal-ganglia", "cerebellum"],
+                               help="Specify the axial slice level of the brain to generate")
+    # Visualization options for generate command
+    generate_parser.add_argument("--visualize", action="store_true",
+                               help="Run visualization after generation to compare with real MRI data")
+    generate_parser.add_argument("--brats_dir", type=str, default=None,
+                               help="BraTS patient directory for comparison visualization")
+    generate_parser.add_argument("--compare_modality", type=str, default="t1",
+                               choices=["t1", "t2", "flair", "t1ce"],
+                               help="MRI modality to use from BraTS dataset for comparison")
+    generate_parser.add_argument("--show_visualization", action="store_true",
+                               help="Display the visualization in addition to saving it")
+    
+    # Visualize command
+    visualize_parser = subparsers.add_parser("visualize", help="Visualize and compare generated MRIs with real BraTS data")
+    visualize_parser.add_argument("--generated_dir", type=str, required=True,
+                                help="Directory containing generated MRI results")
+    visualize_parser.add_argument("--brats_dir", type=str, required=True,
+                                help="BraTS patient directory for comparison")
+    visualize_parser.add_argument("--modality", type=str, default="t1",
+                                choices=["t1", "t2", "flair", "t1ce"],
+                                help="MRI modality to use from BraTS dataset")
+    visualize_parser.add_argument("--slice_level", type=str, default=None,
+                                choices=["superior", "mid-axial", "inferior", "ventricles", "basal-ganglia", "cerebellum"],
+                                help="Axial slice level (if not provided, will be read from generation metadata)")
+    visualize_parser.add_argument("--output_path", type=str, default=None,
+                                help="Output path for visualization (default: generated_dir/comparison.png)")
+    visualize_parser.add_argument("--show", action="store_true",
+                                help="Display the visualization in addition to saving it")
     
     # Prepare data command
     prepare_parser = subparsers.add_parser("prepare", help="Prepare BraTS data for training")
@@ -76,7 +108,7 @@ def parse_args():
                                  help="Path to prepared BraTS data")
     train_lora_parser.add_argument("--output_dir", type=str, default="version3/models/mri_lora",
                                  help="Output directory for LoRA weights")
-    train_lora_parser.add_argument("--base_model", type=str, default="stabilityai/stable-diffusion-2-1",
+    train_lora_parser.add_argument("--base_model", type=str, default="runwayml/stable-diffusion-v1-5",
                                  help="Base model to adapt")
     train_lora_parser.add_argument("--resolution", type=int, default=512,
                                  help="Training resolution")
@@ -84,6 +116,8 @@ def parse_args():
                                  help="Training batch size")
     train_lora_parser.add_argument("--num_train_epochs", type=int, default=100,
                                  help="Number of training epochs")
+    train_lora_parser.add_argument("--max_train_steps", type=int, default=None,
+                               help="Max training steps. If set, overrides num_train_epochs")
     train_lora_parser.add_argument("--learning_rate", type=float, default=1e-4,
                                  help="Learning rate")
     train_lora_parser.add_argument("--rank", type=int, default=4,
@@ -104,7 +138,7 @@ def parse_args():
                                       help="Path to prepared BraTS data")
     train_controlnet_parser.add_argument("--output_dir", type=str, default="version3/models/segmentation_controlnet",
                                       help="Output directory for ControlNet weights")
-    train_controlnet_parser.add_argument("--base_model", type=str, default="stabilityai/stable-diffusion-2-1",
+    train_controlnet_parser.add_argument("--base_model", type=str, default="runwayml/stable-diffusion-v1-5",
                                       help="Base model")
     train_controlnet_parser.add_argument("--controlnet_model", type=str, default="lllyasviel/sd-controlnet-seg",
                                       help="Base ControlNet model to fine-tune")
@@ -191,10 +225,39 @@ def build_command(script_name, args_dict):
     return cmd
 
 def run_generate(args):
-    """Run MRI generation script."""
-    args_dict = vars(args)
-    cmd = build_command("version3/scripts/generate_mri.py", args_dict)
-    print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
+    """Run MRI generation script"""
+    cmd = [
+        "python",
+        "version3/scripts/generate_mri.py",
+        "--prompt", args.prompt,
+        "--output_dir", args.output_dir,
+        "--seed", str(args.seed),
+        "--num_inference_steps", str(args.num_inference_steps),
+        "--guidance_scale", str(args.guidance_scale)
+    ]
+
+    if args.mask:
+        cmd.extend(["--mask", args.mask])
+    else:
+        cmd.extend(["--create_mask", "--slice_level", args.slice_level])
+
+    if args.lora_weights:
+        cmd.extend(["--lora_weights", args.lora_weights])
+
+    if args.base_model:
+        cmd.extend(["--base_model", args.base_model])
+
+    # Add visualization flag if requested
+    if args.visualize:
+        cmd.extend(["--visualize"])
+        if args.brats_dir:
+            cmd.extend(["--brats_dir", args.brats_dir])
+        if args.compare_modality:
+            cmd.extend(["--compare_modality", args.compare_modality])
+        if args.show_visualization:
+            cmd.extend(["--show_visualization"])
+
+    # Run generation script
     subprocess.run(cmd, check=True)
 
 def run_prepare(args):
@@ -229,6 +292,13 @@ def run_segment(args):
     """Run SAM2 segmentation script."""
     args_dict = vars(args)
     cmd = build_command("version3/scripts/segment_mri.py", args_dict)
+    print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
+    subprocess.run(cmd, check=True)
+
+def run_visualize(args):
+    """Run visualization script."""
+    args_dict = vars(args)
+    cmd = build_command("version3/scripts/visualize_results.py", args_dict)
     print(f"Running command: {' '.join(shlex.quote(c) for c in cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -281,6 +351,8 @@ def main():
             run_segment(args)
         elif args.command == "test-cuda":
             test_cuda()
+        elif args.command == "visualize":
+            run_visualize(args)
     except subprocess.CalledProcessError as e:
         print(f"Error running command '{args.command}': {e}", file=sys.stderr)
         sys.exit(1)

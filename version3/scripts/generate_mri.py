@@ -42,6 +42,10 @@ def parse_args():
                       help="Output directory")
     parser.add_argument("--lora_weights", type=str, default="version3/models/mri_lora",
                       help="Path to LoRA weights directory")
+    parser.add_argument("--base_model", type=str, default="runwayml/stable-diffusion-v1-5",
+                      help="Base Stable Diffusion model ID from HuggingFace")
+    parser.add_argument("--controlnet_model", type=str, default="version3/models/segmentation_controlnet",
+                      help="Path to custom ControlNet model or model ID from HuggingFace")
     parser.add_argument("--seed", type=int, default=42,
                       help="Random seed for reproducibility")
     parser.add_argument("--num_inference_steps", type=int, default=30,
@@ -52,6 +56,19 @@ def parse_args():
                       help="ControlNet conditioning scale")
     parser.add_argument("--create_mask", action="store_true",
                       help="Automatically create a tumor mask based on prompt")
+    parser.add_argument("--slice_level", type=str, default="mid-axial",
+                      choices=["superior", "mid-axial", "inferior", "ventricles", "basal-ganglia", "cerebellum"],
+                      help="Specify the axial slice level of the brain to generate")
+    # Visualization options
+    parser.add_argument("--visualize", action="store_true",
+                      help="Run visualization after generation to compare with real MRI data")
+    parser.add_argument("--brats_dir", type=str, default=None,
+                      help="BraTS patient directory for comparison visualization")
+    parser.add_argument("--compare_modality", type=str, default="t1",
+                      choices=["t1", "t2", "flair", "t1ce"],
+                      help="MRI modality to use from BraTS dataset for comparison")
+    parser.add_argument("--show_visualization", action="store_true",
+                      help="Display the visualization in addition to saving it")
     
     return parser.parse_args()
 
@@ -73,40 +90,33 @@ def setup_pipeline(args):
         logger.warning("CUDA not available. Generation will be slow on CPU!")
     
     # Load controlnet model
-    logger.info("Loading ControlNet model...")
-    controlnet_path = "lllyasviel/sd-controlnet-seg"  # Using segmentation ControlNet as the base
+    logger.info(f"Loading ControlNet model from {args.controlnet_model}...")
     try:
         controlnet = ControlNetModel.from_pretrained(
-            controlnet_path,
+            args.controlnet_model,
             torch_dtype=torch.float16 if device == "cuda" else torch.float32
         )
     except Exception as e:
-        logger.error(f"Error loading ControlNet: {e}")
-        # Fall back to Canny ControlNet if segmentation ControlNet fails
-        logger.info("Falling back to Canny ControlNet...")
+        logger.error(f"Error loading custom ControlNet: {e}")
+        # Fall back to default ControlNet if custom fails
+        logger.info("Falling back to default segmentation ControlNet...")
         controlnet = ControlNetModel.from_pretrained(
-            "lllyasviel/sd-controlnet-canny",
+            "lllyasviel/sd-controlnet-seg",
             torch_dtype=torch.float16 if device == "cuda" else torch.float32
         )
     
-    # Load base diffusion model (SD2-1 is more modern than SD1-5)
-    logger.info("Loading base Stable Diffusion model...")
+    # Load base diffusion model
+    logger.info(f"Loading base Stable Diffusion model: {args.base_model}")
     try:
         pipeline = StableDiffusionControlNetPipeline.from_pretrained(
-            "stabilityai/stable-diffusion-2-1",
+            args.base_model,
             controlnet=controlnet,
             safety_checker=None,
             torch_dtype=torch.float16 if device == "cuda" else torch.float32
         )
     except Exception as e:
-        logger.error(f"Error loading SD 2.1: {e}")
-        logger.info("Falling back to SD 1.5...")
-        pipeline = StableDiffusionControlNetPipeline.from_pretrained(
-            "runwayml/stable-diffusion-v1-5",
-            controlnet=controlnet,
-            safety_checker=None,
-            torch_dtype=torch.float16 if device == "cuda" else torch.float32
-        )
+        logger.error(f"Error loading base model {args.base_model}: {e}")
+        raise e
     
     # Use UniPC scheduler for faster and high-quality sampling
     pipeline.scheduler = UniPCMultistepScheduler.from_config(pipeline.scheduler.config)
@@ -180,7 +190,11 @@ def extract_tumor_location(prompt):
         radius = 45
     
     # Find region match
-    for region, coords in regions.items():
+    # Sort keys by length descending to match more specific regions first
+    sorted_regions = sorted(regions.keys(), key=len, reverse=True)
+    
+    for region in sorted_regions:
+        coords = regions[region]
         if region in prompt:
             location = coords
             logger.info(f"Detected tumor in {region} region at coordinates {coords}")
@@ -219,7 +233,7 @@ def create_tumor_mask(prompt, image_size=512):
     
     return Image.fromarray(mask_np)
 
-def prepare_condition_image(mask_path=None, prompt=None, create_mask=False):
+def prepare_condition_image(mask_path=None, prompt=None, create_mask=False, slice_level="mid-axial"):
     """Prepare the condition image for ControlNet."""
     if mask_path:
         logger.info(f"Using provided mask: {mask_path}")
@@ -241,11 +255,40 @@ def prepare_condition_image(mask_path=None, prompt=None, create_mask=False):
     condition_np = np.array(condition_image)
     condition_np[mask_np > 127, 1] = 255  # Green channel for tumor
     
-    # Add a light gray outline for the brain
-    # This helps guide the controlnet to form a brain shape
+    # Add a brain outline appropriate for the requested slice level
     brain_outline = Image.new("L", (512, 512), 0)
     draw = ImageDraw.Draw(brain_outline)
-    draw.ellipse((50, 50, 462, 462), outline=128, width=3)  # Brain outline
+    
+    # Adjust the brain outline shape based on the slice level
+    if slice_level == "superior":
+        # More oval outline for superior slices
+        draw.ellipse((80, 70, 432, 442), outline=128, width=3)
+    elif slice_level == "mid-axial":
+        # Standard outline for mid-axial slices
+        draw.ellipse((50, 50, 462, 462), outline=128, width=3)
+    elif slice_level == "ventricles":
+        # Mid-axial with indication of ventricles
+        draw.ellipse((50, 50, 462, 462), outline=128, width=3)
+        # Add ventricle outlines (simplified)
+        vent_width, vent_height = 30, 60
+        center_x, center_y = 512//2, 512//2
+        spacing = 40
+        draw.ellipse((center_x - spacing - vent_width, center_y - vent_height//2, 
+                      center_x - spacing + vent_width, center_y + vent_height//2), outline=80, width=2)
+        draw.ellipse((center_x + spacing - vent_width, center_y - vent_height//2, 
+                      center_x + spacing + vent_width, center_y + vent_height//2), outline=80, width=2)
+    elif slice_level == "basal-ganglia":
+        # Outline for slices showing basal ganglia
+        draw.ellipse((40, 60, 472, 452), outline=128, width=3)
+    elif slice_level == "inferior":
+        # More rounded outline for inferior slices
+        draw.ellipse((80, 80, 432, 432), outline=128, width=3)
+    elif slice_level == "cerebellum":
+        # Outline for cerebellar slices
+        draw.ellipse((80, 100, 432, 412), outline=128, width=3)
+        # Add rough cerebellum shape
+        points = [(160, 380), (256, 412), (352, 380)]
+        draw.polygon(points, outline=100, width=2)
     
     # Add the brain outline to red channel
     brain_np = np.array(brain_outline)
@@ -263,18 +306,47 @@ def generate_mri(pipeline, args, condition_image):
     # Set seed for reproducibility
     generator = torch.manual_seed(args.seed)
     
-    # Enhance the prompt with MRI-specific language
-    prompt = args.prompt
-    if "MRI" not in prompt and "mri" not in prompt:
-        prompt = f"MRI scan: {prompt}"
-        
-    # Add detail enhancement to the prompt if not present
-    detail_terms = ["high-resolution", "high-detail", "clear", "medical"]
-    if not any(term in prompt.lower() for term in detail_terms):
-        prompt = f"High-resolution {prompt}, clear medical imaging"
+    # Enhance the prompt with specific MRI terminology
+    prompt = args.prompt.strip()
     
-    # Negative prompt to avoid common artifacts
-    negative_prompt = "blurry, distorted, low quality, low resolution, noise, grainy, text, watermark, signature, deformed anatomy, extra structures"
+    # Check for specific MRI sequence type
+    sequence_types = ["T1", "T2", "FLAIR", "DWI", "T1W", "T2W", "T1-weighted", "T2-weighted"]
+    has_sequence_type = any(seq.lower() in prompt.lower() for seq in sequence_types)
+    
+    # Check for view plane
+    view_planes = ["axial", "sagittal", "coronal"]
+    has_view_plane = any(view.lower() in prompt.lower() for view in view_planes)
+    
+    # Ensure the prompt specifies exactly what we need
+    if not has_sequence_type:
+        prompt = f"T1-weighted {prompt}"
+    
+    if not has_view_plane:
+        prompt = f"{prompt}, perfectly axial view"
+    
+    # Add slice level specific terms to the prompt
+    if args.slice_level == "superior":
+        prompt = f"{prompt}, superior axial slice through upper brain"
+    elif args.slice_level == "mid-axial":
+        prompt = f"{prompt}, mid-axial slice through center of brain"
+    elif args.slice_level == "ventricles":
+        prompt = f"{prompt}, axial slice through lateral ventricles"
+    elif args.slice_level == "basal-ganglia":
+        prompt = f"{prompt}, axial slice through basal ganglia"
+    elif args.slice_level == "inferior":
+        prompt = f"{prompt}, inferior axial slice through lower brain"
+    elif args.slice_level == "cerebellum":
+        prompt = f"{prompt}, inferior axial slice through cerebellum"
+        
+    # Ensure it's clearly an MRI
+    if "MRI" not in prompt and "mri" not in prompt:
+        prompt = f"{prompt}, brain MRI scan"
+    
+    # Add specific medical imaging terminology and quality terms
+    prompt = f"{prompt}, clinical quality, diagnostic imaging, medical scan, clear anatomical details, grayscale, medical imaging, top-down view"
+    
+    # Stronger/clearer negative prompt to avoid common artifacts and 3D renders
+    negative_prompt = "blurry, distorted, low quality, low resolution, noise, grainy, text, watermark, signature, deformed anatomy, extra structures, 3D render, 3D model, computer graphics, false color, colorized, artistic, illustration, amateur, sketch, drawing, cartoon, anime, unrealistic, decorated, frame, border, tilted view, rotated view, oblique view, angled view, asymmetrical"
     
     # Start generation timer
     start_time = time.time()
@@ -293,8 +365,44 @@ def generate_mri(pipeline, args, condition_image):
     # End timer
     generation_time = time.time() - start_time
     logger.info(f"Generation completed in {generation_time:.2f} seconds")
+    logger.info(f"Final prompt used: {prompt}")
     
     return result.images[0], generation_time
+
+def run_visualization(generated_dir, brats_dir, modality, slice_level, show=False):
+    """Run the visualization script to compare with real MRI data."""
+    try:
+        from pathlib import Path
+        import subprocess
+        import sys
+
+        # Build command
+        cmd = [
+            sys.executable,
+            "version3/scripts/visualize_results.py",
+            "--generated_dir", str(generated_dir),
+            "--brats_dir", str(brats_dir),
+            "--modality", modality,
+            "--slice_level", slice_level
+        ]
+        
+        # Add show flag if requested
+        if show:
+            cmd.append("--show")
+        
+        # Run visualization
+        logger.info(f"Running visualization to compare with real MRI data...")
+        subprocess.run(cmd, check=True)
+        
+        # Get expected output path
+        output_path = Path(generated_dir) / "comparison.png"
+        if output_path.exists():
+            logger.info(f"Visualization saved to {output_path}")
+            print(f"\nComparison visualization saved to: {output_path}")
+        
+    except Exception as e:
+        logger.error(f"Error running visualization: {e}")
+        print(f"\nWarning: Could not run visualization: {e}")
 
 def main():
     """Main function."""
@@ -316,7 +424,8 @@ def main():
     condition_image = prepare_condition_image(
         mask_path=args.mask,
         prompt=args.prompt,
-        create_mask=args.create_mask
+        create_mask=args.create_mask,
+        slice_level=args.slice_level
     )
     
     # Save condition image
@@ -339,7 +448,9 @@ def main():
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "mask_provided": args.mask is not None,
         "mask_created": args.create_mask,
-        "cuda_available": torch.cuda.is_available()
+        "cuda_available": torch.cuda.is_available(),
+        "controlnet_model": args.controlnet_model,
+        "slice_level": args.slice_level
     }
     
     with open(output_dir / "metadata.json", "w") as f:
@@ -347,6 +458,19 @@ def main():
     
     logger.info(f"Generation complete. Results saved to {output_dir}")
     print(f"\nGenerated MRI saved to: {output_dir / 'generated_mri.png'}")
+    
+    # Run visualization if requested and BraTS directory is provided
+    if args.visualize and args.brats_dir:
+        run_visualization(
+            generated_dir=output_dir,
+            brats_dir=args.brats_dir,
+            modality=args.compare_modality,
+            slice_level=args.slice_level,
+            show=args.show_visualization
+        )
+    elif args.visualize and not args.brats_dir:
+        logger.warning("Visualization requested but no BraTS directory provided. Skipping visualization.")
+        print("\nNote: To run visualization, provide a BraTS directory with --brats_dir")
 
 if __name__ == "__main__":
     main() 

@@ -52,7 +52,7 @@ except ImportError:
 # Add parent directory to path for importing local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.mri_utils import (
-    load_nifti_volume,
+    load_nifti,
     normalize_intensity,
     extract_slice,
     apply_brain_mask
@@ -87,23 +87,22 @@ def find_brats_data(brats_path):
 class BraTSDataLoader:
     """Data loader for BraTS dataset for SAM2 fine-tuning."""
     
-    def __init__(self, brats_path, slice_axis=2, image_size=1024, augmentation=True):
+    def __init__(self, subjects, slice_axis=2, image_size=1024, batch_size=1, augmentation=True):
         """
         Initialize BraTS data loader.
         
         Args:
-            brats_path: Path to BraTS dataset
+            subjects: List of subject dictionaries (from find_brats_data)
             slice_axis: Axis for slice extraction (0, 1, or 2)
             image_size: Maximum size for resizing images
+            batch_size: Number of images per batch (currently processes one image at a time)
             augmentation: Whether to apply data augmentation
         """
-        self.brats_path = Path(brats_path)
+        self.subjects = subjects
         self.slice_axis = slice_axis
         self.image_size = image_size
+        self.batch_size = batch_size # Store batch size
         self.augmentation = augmentation
-        
-        # Find all subjects with required files
-        self.subjects = find_brats_data(brats_path)
         
         # Track loaded data for caching
         self.cached_subject = None
@@ -255,120 +254,130 @@ class BraTSDataLoader:
 
 def load_sam_model(args):
     """
-    Load the SAM model using local pip-installed repositories.
-    First tries to use SAM2 (segment-anything-2) and falls back to original SAM if needed.
+    Load the SAM model.
+    Prioritizes: local checkpoint -> local segment_anything_2 -> local segment_anything -> HuggingFace ID.
     
     Args:
         args: Command line arguments including checkpoint path, model ID, etc.
         
     Returns:
         model: The loaded SAM/SAM2 model
-        processor: Image processor for the model
+        processor: Image processor for the model (or predictor for local SAM)
         resume_step: Step to resume training from (0 if not resuming)
     """
     logger.info("Loading SAM model...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     resume_step = 0
-    
-    # First, try to load from checkpoint if provided
-    if args.sam_checkpoint and os.path.exists(args.sam_checkpoint):
-        logger.info(f"Loading checkpoint from {args.sam_checkpoint}")
-        checkpoint = torch.load(args.sam_checkpoint, map_location=device)
-        
-        # Check if this is a full checkpoint (with optimizer state) or just the model
-        if 'model_state_dict' in checkpoint:
-            model_dict = checkpoint['model_state_dict']
-            # If we have step information, use it to resume training
-            if 'step' in checkpoint:
-                resume_step = checkpoint['step']
-                logger.info(f"Resuming from step {resume_step}")
-        else:
-            # Assume the checkpoint is just the model state dict
-            model_dict = checkpoint
-        
-        # Try to first load as SAM2
+    model = None
+    processor = None
+
+    # 1. Try loading from checkpoint
+    checkpoint_path = args.sam_checkpoint
+    if checkpoint_path and os.path.exists(checkpoint_path):
+        logger.info(f"Attempting to load checkpoint from {checkpoint_path}")
         try:
-            import segment_anything_2  # Import the local pip installation
-            # Prepare SAM2 model configuration
-            if args.sam_config and os.path.exists(args.sam_config):
-                logger.info(f"Loading SAM2 configuration from {args.sam_config}")
-                with open(args.sam_config, "r") as f:
-                    model_config = json.load(f)
-                model = segment_anything_2.build_sam2_vit_l(args.sam_config)
-            else:
-                logger.info("Using default SAM2 ViT-L configuration")
-                model = segment_anything_2.build_sam2_vit_l()
-            
-            # Load checkpoint weights
-            model.load_state_dict(model_dict, strict=False)
-            processor = segment_anything_2.sam2_model_registry["vit_l"]
-            
-            logger.info("Successfully loaded SAM2 model from checkpoint")
-        except (ImportError, ValueError, KeyError) as e:
-            logger.warning(f"Failed to load as SAM2: {e}. Trying original SAM...")
-            
-            # Try loading as original SAM
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model_dict = checkpoint.get('model_state_dict', checkpoint)
+            resume_step = checkpoint.get('step', 0)
+            if resume_step > 0:
+                 logger.info(f"Resuming from step {resume_step}")
+
+            # Try to load as SAM2 first
             try:
-                import segment_anything  # Import the local pip installation
-                if args.sam_config and os.path.exists(args.sam_config):
-                    logger.info(f"Loading SAM configuration from {args.sam_config}")
-                    with open(args.sam_config, "r") as f:
-                        model_config = json.load(f)
-                    model = segment_anything.build_sam_vit_h(model_config)
-                else:
-                    logger.info("Using default SAM ViT-H configuration")
-                    model = segment_anything.build_sam_vit_h()
-                
-                # Load checkpoint weights
+                import segment_anything_2
+                logger.info("Attempting to load checkpoint as segment_anything_2 model...")
+                # Assuming default vit_l for checkpoint loading if config missing
+                model = segment_anything_2.build_sam2_vit_l() # Add configuration loading if needed
                 model.load_state_dict(model_dict, strict=False)
-                processor = segment_anything.SamPredictor(model)
-                
-                logger.info("Successfully loaded SAM model from checkpoint")
-            except Exception as e2:
-                logger.error(f"Failed to load from checkpoint as either SAM2 or SAM: {e2}")
-                raise RuntimeError("Could not load model from checkpoint")
+                # SAM2 doesn't have a separate processor, handled by model interaction
+                processor = None
+                logger.info("Successfully loaded checkpoint as SAM2 model.")
+            except Exception as e1:
+                logger.warning(f"Failed to load checkpoint as SAM2: {e1}. Trying as original SAM...")
+                # Try loading as original SAM
+                try:
+                    import segment_anything
+                    logger.info("Attempting to load checkpoint as segment_anything model...")
+                    # Assuming default vit_h for checkpoint loading
+                    model = segment_anything.sam_model_registry["vit_h"]()
+                    model.load_state_dict(model_dict, strict=False)
+                    # Original SAM uses SamPredictor
+                    from segment_anything import SamPredictor
+                    processor = SamPredictor(model)
+                    logger.info("Successfully loaded checkpoint as SAM model.")
+                except Exception as e2:
+                    logger.error(f"Failed to load checkpoint as either SAM2 or SAM: {e2}")
+                    model = None # Ensure model is None if loading failed
+        except Exception as e:
+            logger.error(f"Error loading checkpoint file {checkpoint_path}: {e}")
+            model = None
     
-    # If no checkpoint provided or loading failed, try to load from HuggingFace or default
-    else:
+    # 2. If no model loaded from checkpoint, try local installations
+    if model is None:
+        logger.info("No valid checkpoint found or loaded. Trying local installations...")
+        try:
+            # Try SAM2 first
+            import segment_anything_2
+            logger.info("Loading default SAM2 ViT-L model from local installation.")
+            # Add configuration loading logic if needed based on args.sam_config
+            model = segment_anything_2.build_sam2_vit_l()
+            processor = None
+            logger.info("Successfully loaded local SAM2 model.")
+        except ImportError:
+            logger.info("segment_anything_2 not found locally. Trying original segment_anything...")
+            # Fall back to original SAM
+            try:
+                import segment_anything
+                logger.info("Loading default SAM ViT-H model from local installation.")
+                model = segment_anything.sam_model_registry["vit_h"]()
+                from segment_anything import SamPredictor
+                processor = SamPredictor(model)
+                logger.info("Successfully loaded local SAM model.")
+            except ImportError:
+                logger.warning("Neither segment_anything_2 nor segment_anything found locally.")
+                model = None
+                processor = None
+
+    # 3. If still no model, try HuggingFace ID
+    if model is None:
+        logger.info("No local SAM/SAM2 model loaded. Trying HuggingFace ID...")
         if args.sam_model_id:
             try:
                 logger.info(f"Loading SAM model from HuggingFace: {args.sam_model_id}")
+                # Use original SAM classes from transformers for compatibility
                 from transformers import SamModel, SamProcessor
                 model = SamModel.from_pretrained(args.sam_model_id)
                 processor = SamProcessor.from_pretrained(args.sam_model_id)
+                logger.info(f"Successfully loaded {args.sam_model_id} from HuggingFace.")
             except Exception as e:
-                logger.error(f"Failed to load from HuggingFace: {e}")
-                raise RuntimeError("Could not load model from HuggingFace")
+                logger.error(f"Failed to load from HuggingFace ID {args.sam_model_id}: {e}")
+                model = None # Ensure model is None
         else:
-            # Try local GitHub implementations
-            try:
-                # First try SAM2
-                import segment_anything_2
-                logger.info("Loading default SAM2 ViT-L model")
-                model = segment_anything_2.build_sam2_vit_l()
-                processor = segment_anything_2.sam2_model_registry["vit_l"]
-                logger.info("Successfully loaded SAM2 model")
-            except ImportError:
-                # Fall back to original SAM
-                try:
-                    import segment_anything
-                    logger.info("Loading default SAM ViT-H model")
-                    model = segment_anything.build_sam_vit_h()
-                    processor = segment_anything.SamPredictor(model)
-                    logger.info("Successfully loaded SAM model")
-                except ImportError as e:
-                    logger.error(f"Neither SAM2 nor SAM is installed: {e}")
-                    raise RuntimeError("No SAM implementation found. Install segment-anything-2 or segment-anything")
-    
+            logger.warning("No HuggingFace Model ID provided.")
+
+    # Final check: If no model could be loaded, raise error
+    if model is None:
+        raise RuntimeError("Failed to load SAM model from checkpoint, local installation, or HuggingFace Hub.")
+
     # Move model to device
     model = model.to(device)
-    
+
     # Freeze image encoder if specified
     if not args.train_image_encoder:
-        logger.info("Freezing image encoder parameters")
-        for param in model.image_encoder.parameters():
-            param.requires_grad = False
-    
+        # Check for common attribute names for the image encoder
+        encoder_attr = None
+        if hasattr(model, 'image_encoder'):
+            encoder_attr = 'image_encoder'
+        elif hasattr(model, 'vision_encoder'): # Some HF models use this
+             encoder_attr = 'vision_encoder'
+        
+        if encoder_attr:
+            logger.info(f"Freezing {encoder_attr} parameters")
+            for param in getattr(model, encoder_attr).parameters():
+                param.requires_grad = False
+        else:
+             logger.warning("Could not find image encoder attribute to freeze.")
+
     return model, processor, resume_step
 
 def save_checkpoint(model, optimizer, step_or_name, args):
@@ -396,88 +405,106 @@ def save_checkpoint(model, optimizer, step_or_name, args):
     logger.info(f"Checkpoint saved to {checkpoint_path}")
     return checkpoint_path
 
-def validate(model, valid_loader, args):
+def validate(model, processor, valid_loader, args):
     """Evaluate the model on validation data."""
     model.eval()
     total_iou = 0.0
     count = 0
-    
+    device = next(model.parameters()).device
+
+    logger.info(f"Running validation for max {args.max_eval_steps} steps...")
     with torch.no_grad():
-        for step, batch in enumerate(valid_loader):
-            if step >= args.max_eval_steps:
-                break
-                
-            images = batch["image"].to(device)
-            masks = batch["mask"].to(device)
+        for step in range(args.max_eval_steps):
+            batch_data = valid_loader.get_batch()
+            if batch_data is None:
+                logger.warning("Validation loader returned None, skipping batch.")
+                continue # Skip if no valid data could be loaded
+
+            image, gt_masks, points, labels = batch_data
             
-            # Create point prompts from ground truth masks
-            batch_points = []
-            batch_labels = []
+            # Convert numpy arrays to tensors and move to device
+            image_tensor = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0).float().to(device) # Add batch dim
+            gt_masks_tensor = torch.from_numpy(gt_masks).unsqueeze(1).float().to(device) # Add channel dim
+            points_tensor = torch.from_numpy(points).float().to(device)
+            labels_tensor = torch.from_numpy(labels).float().to(device)
             
-            for mask in masks:
-                pos_indices = torch.nonzero(mask > 0.5, as_tuple=True)
-                if pos_indices[0].numel() > 0:
-                    # Randomly select a positive pixel
-                    random_idx = random.randint(0, pos_indices[0].numel() - 1)
-                    y, x = pos_indices[0][random_idx], pos_indices[1][random_idx]
-                    point = torch.tensor([x, y])
-                    label = torch.tensor([1])  # Foreground
-                else:
-                    # If no foreground, use center as background
-                    h, w = mask.shape
-                    point = torch.tensor([w//2, h//2])
-                    label = torch.tensor([0])  # Background
-                
-                batch_points.append(point.unsqueeze(0))
-                batch_labels.append(label)
+            # Prepare inputs for the model (handle different processor types)
+            if processor is not None and hasattr(processor, "preprocess"):
+                 # HuggingFace Processor
+                 inputs = processor(images=image_tensor, input_points=points_tensor, input_labels=labels_tensor, return_tensors="pt").to(device)
+                 image_embeddings = model.get_image_embeddings(inputs["pixel_values"])
+                 sparse_embeddings, dense_embeddings = model.get_prompt_embeddings(
+                    input_points=inputs["input_points"],
+                    input_labels=inputs["input_labels"],
+                    input_boxes=None # Assuming no box prompts for validation
+                 )
+            elif processor is not None and isinstance(processor, segment_anything.SamPredictor):
+                 # Original SAM Predictor
+                 processor.set_image(image) # Predictor expects numpy HWC
+                 image_embeddings = processor.get_image_embedding().to(device)
+                 # Original SAM expects points in format [[x,y], [x,y]], labels [1, 0]
+                 input_points = points_tensor.squeeze(1).cpu().numpy() # Remove batch dim for predictor
+                 input_labels = labels_tensor.squeeze(1).cpu().numpy()
+                 sparse_embeddings, dense_embeddings = model.prompt_encoder(
+                     points=(torch.as_tensor(input_points, device=device).unsqueeze(1), torch.as_tensor(input_labels, device=device).unsqueeze(1)),
+                     boxes=None,
+                     masks=None,
+                 )
+            else:
+                # SAM2 local model or unknown
+                logger.warning("Processor type not recognized or None, attempting generic forward pass.")
+                image_embeddings = model.image_encoder(image_tensor)
+                sparse_embeddings, dense_embeddings = model.prompt_encoder(
+                    points=(points_tensor, labels_tensor),
+                    boxes=None,
+                    masks=None,
+                )
+
+            # Predict masks
+            if hasattr(model, 'mask_decoder'):
+                mask_predictions, iou_predictions = model.mask_decoder(
+                    image_embeddings=image_embeddings,
+                    image_pe=model.prompt_encoder.get_dense_pe(),
+                    sparse_prompt_embeddings=sparse_embeddings,
+                    dense_prompt_embeddings=dense_embeddings,
+                    multimask_output=False, # Get single best mask
+                )
+            else:
+                 logger.error("Model does not have a mask_decoder attribute.")
+                 continue # Skip batch if model structure is wrong
+
+            # Calculate IoU
+            pred_masks_prob = torch.sigmoid(mask_predictions)
+            pred_masks_binary = (pred_masks_prob > 0.5).float()
             
-            batch_points = torch.stack(batch_points).to(device)
-            batch_labels = torch.stack(batch_labels).to(device)
+            # Ensure masks have the same shape [B, 1, H, W]
+            # gt_masks_tensor should be [B, NumInstances, H, W], need to handle B=1, NumInstances > 1
+            # For validation, let's assume we take the union of GT masks if multiple exist
+            gt_mask_union = (gt_masks_tensor.sum(dim=1, keepdim=True) > 0).float()
             
-            # Get image embeddings
-            image_embeddings = model.image_encoder(images)
-            
-            # Process the points with the prompt encoder
-            sparse_embeddings, dense_embeddings = model.prompt_encoder(
-                points=batch_points,
-                labels=batch_labels,
-                boxes=None,
-                masks=None,
+            # Resize GT mask to match prediction size for IoU calculation
+            target_masks_resized = F.interpolate(
+                gt_mask_union,
+                size=pred_masks_binary.shape[-2:], # Get H, W from prediction
+                mode='nearest'
             )
             
-            # Predict masks
-            if SAM2_SOURCE == "GITHUB_SAM2":
-                mask_predictions, _ = model.mask_decoder(
-                    image_embeddings=image_embeddings,
-                    image_pe=model.prompt_encoder.get_dense_pe(),
-                    sparse_prompt_embeddings=sparse_embeddings,
-                    dense_prompt_embeddings=dense_embeddings,
-                    multimask_output=False,
-                )
-            else:  # SAM2_SOURCE == "GITHUB_SAM"
-                mask_predictions, _ = model.mask_decoder(
-                    image_embeddings=image_embeddings,
-                    image_pe=model.prompt_encoder.get_dense_pe(),
-                    sparse_prompt_embeddings=sparse_embeddings,
-                    dense_prompt_embeddings=dense_embeddings,
-                    multimask_output=False,
-                )
-            
-            # Calculate IoU
-            mask_predictions_binary = (torch.sigmoid(mask_predictions) > 0.5).float()
-            intersection = (mask_predictions_binary * masks.unsqueeze(1)).sum(dim=(2, 3))
-            union = (mask_predictions_binary + masks.unsqueeze(1) - mask_predictions_binary * masks.unsqueeze(1)).sum(dim=(2, 3))
-            iou = (intersection / (union + 1e-6)).mean()
+            # Calculate intersection and union
+            intersection = (pred_masks_binary * target_masks_resized).sum(dim=(1, 2, 3))
+            union = (pred_masks_binary + target_masks_resized).sum(dim=(1, 2, 3)) - intersection
+            iou = (intersection / (union + 1e-6)).mean() # Mean over batch (should be 1)
             
             total_iou += iou.item()
             count += 1
-    
-    return total_iou / count if count > 0 else 0.0
+
+    avg_iou = total_iou / count if count > 0 else 0.0
+    logger.info(f"Validation complete. Average IoU: {avg_iou:.4f} over {count} steps.")
+    return avg_iou
 
 def train_model(args):
     """Train the SAM2 model on BraTS dataset."""
-    # Set up logger
-    setup_logging(args.output_dir)
+    # Set up logger - Logging is already configured in main, so this isn't needed here
+    # setup_logging(args.output_dir) # Removed this line
     logger.info("Starting SAM2 training on BraTS dataset")
     logger.info(f"Arguments: {args}")
     
@@ -501,19 +528,19 @@ def train_model(args):
     
     # Create data loaders
     train_loader = BraTSDataLoader(
-        subject_dirs=train_subjects,
+        subjects=train_subjects,
         slice_axis=args.slice_axis,
+        image_size=args.image_size,
         batch_size=args.batch_size,
-        use_augmentation=args.augmentation,
-        cache_data=True
+        augmentation=args.augmentation
     )
     
     val_loader = BraTSDataLoader(
-        subject_dirs=val_subjects,
+        subjects=val_subjects,
         slice_axis=args.slice_axis,
+        image_size=args.image_size, 
         batch_size=args.batch_size,
-        use_augmentation=False,
-        cache_data=True
+        augmentation=False
     )
     
     # Load model
@@ -549,10 +576,11 @@ def train_model(args):
 def train(model, processor, train_loader, val_loader, optimizer, scheduler, args, resume_step=0):
     """Main training loop."""
     device = next(model.parameters()).device
-    scaler = torch.cuda.amp.GradScaler() if args.mixed_precision else None
+    # Use scaler only if mixed precision is fp16 or bf16
+    scaler = torch.amp.GradScaler('cuda', enabled=(args.mixed_precision in ['fp16', 'bf16']))
     
     # For tracking metrics
-    best_val_dice = 0.0
+    best_val_iou = 0.0 # Changed from best_val_dice
     total_loss = 0.0
     step = resume_step
     
@@ -566,127 +594,175 @@ def train(model, processor, train_loader, val_loader, optimizer, scheduler, args
     while step < args.max_train_steps:
         model.train()
         
-        for batch in train_loader:
-            # Skip steps if resuming
-            if step < resume_step:
-                step += 1
-                continue
+        # Explicitly get batch data
+        batch_data = train_loader.get_batch()
+        if batch_data is None:
+            logger.warning("Train loader returned None, skipping step.")
+            continue # Skip if no valid data could be loaded
             
-            # Get batch data
-            images = batch["image"].to(device)
-            masks = batch["mask"].to(device)
-            
-            # Forward pass with mixed precision
-            with torch.cuda.amp.autocast(enabled=bool(args.mixed_precision)):
-                if processor is not None and hasattr(processor, "preprocess"):
-                    # HuggingFace processor
-                    inputs = processor(images=images, return_tensors="pt").to(device)
-                    outputs = model(**inputs, input_masks=masks.unsqueeze(1))
-                    loss = outputs.loss
-                else:
-                    # Original SAM2 or SAM
-                    image_embeddings = model.image_encoder(images)
-                    loss = 0
-                    
-                    # Process each image in the batch individually
-                    for i in range(images.shape[0]):
-                        # Get sparse mask prompt representation
-                        sparse_embeddings, dense_embeddings = model.prompt_encoder(
-                            points=None,
-                            boxes=None,
-                            masks=masks[i:i+1].unsqueeze(1)  # [1, 1, H, W]
-                        )
-                        
-                        # Predict masks
-                        mask_predictions, _ = model.mask_decoder(
-                            image_embeddings=image_embeddings[i:i+1],
-                            image_pe=model.prompt_encoder.get_dense_pe(),
-                            sparse_prompt_embeddings=sparse_embeddings,
-                            dense_prompt_embeddings=dense_embeddings,
-                            multimask_output=False,
-                        )
-                        
-                        # Compute loss - Binary cross-entropy loss
-                        pred_masks = mask_predictions
-                        target_masks = masks[i:i+1].float()
-                        
-                        # Compute BCE loss
-                        bce_loss = F.binary_cross_entropy_with_logits(
-                            pred_masks, target_masks, reduction="mean"
-                        )
-                        
-                        # Compute Dice loss
-                        pred_flat = torch.sigmoid(pred_masks).flatten()
-                        target_flat = target_masks.flatten()
-                        intersection = (pred_flat * target_flat).sum()
-                        dice_loss = 1 - (2. * intersection) / (
-                            pred_flat.sum() + target_flat.sum() + 1e-8
-                        )
-                        
-                        # Combined loss
-                        loss += bce_loss + dice_loss
-                    
-                    # Average loss over batch
-                    loss = loss / images.shape[0]
-            
-            # Backward pass with gradient scaling if using mixed precision
-            if scaler:
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                loss.backward()
-                optimizer.step()
-            
-            # Update scheduler if using
-            if scheduler is not None:
-                scheduler.step()
-            
-            # Zero gradients
-            optimizer.zero_grad()
-            
-            # Accumulate loss for logging
-            total_loss += loss.item()
-            
-            # Log every 50 steps
-            if (step + 1) % args.log_every == 0:
-                current_time = time.time()
-                elapsed = current_time - last_log_time
-                steps_per_sec = args.log_every / elapsed
-                avg_loss = total_loss / args.log_every
-                
-                logger.info(
-                    f"Step {step+1}/{args.max_train_steps} | "
-                    f"Loss: {avg_loss:.4f} | "
-                    f"Steps/sec: {steps_per_sec:.2f} | "
-                    f"Elapsed: {(current_time - start_time) / 60:.1f} min"
-                )
-                
-                # Reset metrics
-                total_loss = 0.0
-                last_log_time = current_time
-            
-            # Save checkpoint periodically
-            if (step + 1) % args.save_steps == 0:
-                save_checkpoint(model, optimizer, step + 1, args)
-            
-            # Run validation periodically
-            if (step + 1) % args.eval_steps == 0:
-                val_dice = validate(model, val_loader, args)
-                logger.info(f"Validation Dice: {val_dice:.4f}")
-                
-                # Save best model
-                if val_dice > best_val_dice:
-                    best_val_dice = val_dice
-                    save_checkpoint(model, optimizer, "best", args)
-                    logger.info(f"New best model with Dice: {val_dice:.4f}")
-            
-            # Increment step
+        image, gt_masks, points, labels = batch_data
+        
+        # Skip steps if resuming (do this after getting batch to keep counts consistent)
+        if step < resume_step:
             step += 1
+            continue
+        
+        # Convert numpy arrays to tensors and move to device
+        image_tensor = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0).float().to(device)
+        gt_masks_tensor = torch.from_numpy(gt_masks).unsqueeze(1).float().to(device) # Add channel dim
+        points_tensor = torch.from_numpy(points).float().to(device)
+        labels_tensor = torch.from_numpy(labels).float().to(device)
+        
+        # Zero gradients before forward pass
+        optimizer.zero_grad()
+
+        # Forward pass with mixed precision
+        with torch.amp.autocast(device_type='cuda', dtype=torch.float16 if args.mixed_precision == 'fp16' else torch.bfloat16, enabled=(args.mixed_precision in ['fp16', 'bf16'])):
+            loss = 0
+            # Prepare inputs for the model (handle different processor types)
+            if processor is not None and hasattr(processor, "preprocess"):
+                 # HuggingFace Processor - needs image, points, labels
+                 inputs = processor(images=image_tensor, input_points=points_tensor, input_labels=labels_tensor, return_tensors="pt").to(device)
+                 # We need to compute loss manually here as HF SAM doesn't return loss directly with point prompts
+                 image_embeddings = model.get_image_embeddings(inputs["pixel_values"])
+                 sparse_embeddings, dense_embeddings = model.get_prompt_embeddings(
+                    input_points=inputs["input_points"],
+                    input_labels=inputs["input_labels"],
+                    input_boxes=None
+                 )
+            elif processor is not None and isinstance(processor, segment_anything.SamPredictor):
+                 # Original SAM Predictor
+                 # Important: Predictor works instance by instance, not batched
+                 # This training loop assumes batch_size=1 from the loader
+                 if image_tensor.shape[0] != 1:
+                     logger.error("Training loop assumes batch_size=1 for original SAM Predictor")
+                     continue
+                 
+                 processor.set_image(image) # Expects numpy HWC
+                 image_embeddings = processor.get_image_embedding().to(device)
+                 # Original SAM expects points in format [[x,y]], labels [1]
+                 input_points = points_tensor.squeeze(1).cpu().numpy() # Instance points
+                 input_labels = labels_tensor.squeeze(1).cpu().numpy() # Instance labels
+                 
+                 sparse_embeddings, dense_embeddings = model.prompt_encoder(
+                     points=(torch.as_tensor(input_points, device=device).unsqueeze(1), torch.as_tensor(input_labels, device=device).unsqueeze(1)),
+                     boxes=None,
+                     masks=None,
+                 )
+            else:
+                # SAM2 local model or unknown
+                logger.warning("Processor type not recognized or None, attempting generic forward pass.")
+                image_embeddings = model.image_encoder(image_tensor)
+                sparse_embeddings, dense_embeddings = model.prompt_encoder(
+                    points=(points_tensor, labels_tensor),
+                    boxes=None,
+                    masks=None,
+                )
             
-            # Check if we've reached max steps
-            if step >= args.max_train_steps:
-                break
+            # Predict masks - common step
+            if hasattr(model, 'mask_decoder'):
+                mask_predictions, iou_predictions = model.mask_decoder(
+                    image_embeddings=image_embeddings,
+                    image_pe=model.prompt_encoder.get_dense_pe(),
+                    sparse_prompt_embeddings=sparse_embeddings,
+                    dense_prompt_embeddings=dense_embeddings,
+                    multimask_output=False, # Get single best mask
+                )
+            else:
+                 logger.error("Model does not have a mask_decoder attribute.")
+                 continue # Skip batch if model structure is wrong
+            
+            # Compute loss - Binary cross-entropy + Dice loss
+            # Ensure gt_masks_tensor has the same shape as pred_masks: [B, 1, H, W]
+            # gt_masks_tensor is [B, NumInstances, H, W], take union for loss
+            gt_mask_union = (gt_masks_tensor.sum(dim=1, keepdim=True) > 0).float()
+
+            pred_masks = mask_predictions
+            # Resize GT mask to match prediction size for loss calculation
+            target_masks_resized = F.interpolate(
+                gt_mask_union,
+                size=pred_masks.shape[-2:], # Get H, W from prediction
+                mode='nearest'
+            )
+            
+            # Compute BCE loss
+            bce_loss = F.binary_cross_entropy_with_logits(
+                pred_masks, target_masks_resized, reduction="mean"
+            )
+            
+            # Compute Dice loss
+            pred_flat = torch.sigmoid(pred_masks).flatten(1)
+            target_flat = target_masks_resized.flatten(1)
+            intersection = (pred_flat * target_flat).sum(1)
+            dice_loss = 1 - (2. * intersection) / (
+                pred_flat.sum(1) + target_flat.sum(1) + 1e-8
+            )
+            dice_loss = dice_loss.mean() # Average over batch
+            
+            # Combined loss
+            loss = bce_loss + dice_loss
+
+        # Backward pass with gradient scaling if using mixed precision
+        if scaler:
+            scaler.scale(loss).backward()
+            # Optional: Gradient clipping
+            # scaler.unscale_(optimizer)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            # Optional: Gradient clipping
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+        
+        # Update scheduler if using
+        if scheduler is not None:
+            scheduler.step()
+        
+        # Accumulate loss for logging
+        total_loss += loss.item()
+        
+        # Log every N steps
+        if (step + 1) % args.log_every == 0:
+            current_time = time.time()
+            elapsed = current_time - last_log_time
+            steps_per_sec = args.log_every / elapsed if elapsed > 0 else 0
+            avg_loss = total_loss / args.log_every
+            
+            logger.info(
+                f"Step {step+1}/{args.max_train_steps} | "
+                f"Loss: {avg_loss:.4f} | "
+                f"LR: {optimizer.param_groups[0]['lr']:.2e} | "
+                f"Steps/sec: {steps_per_sec:.2f} | "
+                f"Elapsed: {(current_time - start_time) / 60:.1f} min"
+            )
+            
+            # Reset metrics
+            total_loss = 0.0
+            last_log_time = current_time
+        
+        # Save checkpoint periodically
+        if (step + 1) % args.save_steps == 0:
+            save_checkpoint(model, optimizer, step + 1, args)
+        
+        # Run validation periodically if enabled
+        if args.do_validation and (step + 1) % args.eval_steps == 0:
+            val_iou = validate(model, processor, val_loader, args)
+            model.train() # Switch back to train mode after validation
+            
+            # Save best model based on validation IoU
+            if val_iou > best_val_iou:
+                best_val_iou = val_iou
+                save_checkpoint(model, optimizer, "best", args)
+                logger.info(f"New best model with IoU: {val_iou:.4f}")
+        
+        # Increment step
+        step += 1
+        
+        # Check if we've reached max steps
+        if step >= args.max_train_steps:
+            break
     
     # Save final model
     save_checkpoint(model, optimizer, "final", args)
@@ -704,12 +780,12 @@ def parse_args():
                       help="Directory to save fine-tuned model")
     
     # Model parameters
-    parser.add_argument("--sam_checkpoint", type=str, default="sam2_hiera_small.pt",
-                      help="Path to SAM2 checkpoint (for local implementation)")
-    parser.add_argument("--sam_config", type=str, default="sam2_hiera_s.yaml",
-                      help="Path to SAM2 config file (for local implementation)")
-    parser.add_argument("--sam_model_id", type=str, default="facebook/sam2",
-                      help="SAM2 model ID (for transformers implementation)")
+    parser.add_argument("--sam_checkpoint", type=str, default=None,
+                      help="Path to local SAM/SAM2 checkpoint (will be tried first)")
+    parser.add_argument("--sam_config", type=str, default=None,
+                      help="Path to SAM2 config file (used if loading local checkpoint)")
+    parser.add_argument("--sam_model_id", type=str, default="facebook/sam-vit-large",
+                      help="HuggingFace SAM model ID (fallback if no checkpoint/local install)")
     parser.add_argument("--train_image_encoder", action="store_true",
                       help="Whether to train the image encoder (requires more GPU memory)")
     
@@ -718,14 +794,26 @@ def parse_args():
                       help="Learning rate for training")
     parser.add_argument("--weight_decay", type=float, default=4e-5,
                       help="Weight decay for optimizer")
+    parser.add_argument("--lr_scheduler", type=str, default="cosine", choices=["cosine", "constant"],
+                      help="Learning rate scheduler type")
+    parser.add_argument("--min_learning_rate", type=float, default=1e-6,
+                      help="Minimum learning rate for cosine scheduler")
+    parser.add_argument("--mixed_precision", type=str, default="fp16", choices=["no", "fp16", "bf16"],
+                      help="Enable mixed precision training (fp16 or bf16)")
     parser.add_argument("--max_train_steps", type=int, default=5000,
                       help="Maximum number of training steps")
-    parser.add_argument("--logging_steps", type=int, default=100,
+    parser.add_argument("--log_every", type=int, default=50, # Renamed from logging_steps for clarity
                       help="Log training metrics every N steps")
     parser.add_argument("--save_steps", type=int, default=1000,
                       help="Save checkpoint every N steps")
+    parser.add_argument("--eval_steps", type=int, default=500,
+                      help="Run validation every N steps")
+    parser.add_argument("--max_eval_steps", type=int, default=50,
+                      help="Maximum number of batches to use for validation")
     parser.add_argument("--image_size", type=int, default=1024,
                       help="Maximum image size for training")
+    parser.add_argument("--batch_size", type=int, default=1,
+                      help="Batch size for training (per GPU)")
     parser.add_argument("--slice_axis", type=int, default=2,
                       help="Axis for slicing 3D volumes (0, 1, or 2)")
     parser.add_argument("--augmentation", action="store_true",
