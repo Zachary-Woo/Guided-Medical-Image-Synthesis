@@ -183,7 +183,6 @@ class ControlNetMRIDataset(Dataset):
         
         for i in range(image_vol.shape[2]):
             image_slice = image_vol[:, :, i]
-            mask_slice = mask_vol[:, :, i] if mask_vol.shape[2] > i else np.zeros_like(image_slice)
             
             # Check if slice has sufficient brain content
             if np.sum(image_slice > 0.1) > 100:  # At least 100 voxels with intensity > 0.1

@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from PIL import Image
-import io
 import cv2
 
 

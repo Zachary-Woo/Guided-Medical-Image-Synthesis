@@ -3,7 +3,6 @@ Metrics for evaluating generated medical images.
 """
 
 import torch
-import torch.nn.functional as F
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from torchmetrics.functional import dice_score, jaccard_index

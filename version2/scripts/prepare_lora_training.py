@@ -5,13 +5,10 @@ This script downloads sample datasets, preprocesses images with stain normalizat
 and generates configuration for training.
 """
 
-import os
 import sys
 import logging
 import argparse
 import json
-import shutil
-import random
 import numpy as np
 from pathlib import Path
 import requests
@@ -19,7 +16,6 @@ import zipfile
 import tarfile
 from tqdm import tqdm
 from PIL import Image
-import pandas as pd
 import yaml
 
 # Add parent directory to path for importing project modules
@@ -31,9 +27,6 @@ if parent_dir not in sys.path:
 try:
     from version2.utils.stain_normalization import (
         normalize_histopathology_image,
-        MacenkoNormalizer,
-        ReinhardNormalizer,
-        visualize_normalization
     )
 except ImportError:
     print("Stain normalization utilities not found. Please run from the project root directory.")
@@ -52,9 +45,9 @@ logger = logging.getLogger(__name__)
 # Dataset URLs
 DATASET_URLS = {
     "kather_texture": "https://zenodo.org/record/53169/files/Kather_texture_2016_image_tiles_5000.zip",
-    "breakhis": "https://www.inf.ufpr.br/vri/databases/BreaKHis_v1.tar.gz",  # Requires authentication
-    "pcam": "https://drive.google.com/uc?id=1Ka0XfEMiwgCYPdTI-vv6eUElOBnKFKQ2",  # Will need manual download
-    "camelyon": "https://drive.google.com/uc?id=1bIXGIX8SQB8pddkHvVj2V22NOl4OkGk0"  # Will need manual download
+    "breakhis": "https://www.inf.ufpr.br/vri/databases/BreaKHis_v1.tar.gz",
+    "pcam": "https://drive.google.com/uc?id=1Ka0XfEMiwgCYPdTI-vv6eUElOBnKFKQ2",
+    "camelyon": "https://drive.google.com/uc?id=1bIXGIX8SQB8pddkHvVj2V22NOl4OkGk0"
 }
 
 def parse_args():
@@ -485,8 +478,6 @@ def process_local_dataset(local_path_str, output_dir, args):
         logger.info(f"Loading images from .npz file: {local_path}")
         try:
             with np.load(local_path) as data:
-                # --- ASSUMPTION: Images are stored under the key 'train_images' --- # 
-                # --- If this is incorrect, change the key below --- #
                 image_key = 'train_images' 
                 if image_key not in data:
                     available_keys = list(data.keys())
@@ -547,8 +538,7 @@ def process_local_dataset(local_path_str, output_dir, args):
         except Exception as e:
             logger.error(f"Failed to load reference image: {e}")
             logger.warning("Proceeding without stain normalization reference")
-            reference_image = None # Ensure it's None if loading failed
-    # Log warning for synthetic reference ONCE if applicable
+            reference_image = None
     elif args.stain_norm.lower() != "none":
         logger.warning("No reference image provided via --reference_image. Using synthetic reference for normalization.")
 

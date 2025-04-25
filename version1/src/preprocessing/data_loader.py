@@ -6,8 +6,7 @@ import os
 import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
-import numpy as np
-import logging # Import logging
+import logging
 
 
 class MedicalImageDataset(Dataset):
@@ -80,25 +79,19 @@ class MedicalImageDataset(Dataset):
                     for fname in os.listdir(mask_dir)
                     if fname.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.bmp'))
                 ])
-                # Simple matching logic: assume mask names correspond to image names
-                # This might need adjustment based on actual naming conventions
+                # assume mask names correspond to image names
                 img_basenames = {os.path.splitext(os.path.basename(p))[0] for p in self.image_paths}
                 for mask_path in mask_candidates:
                     mask_basename = os.path.splitext(os.path.basename(mask_path))[0]
                     # Check if mask basename (without ext) matches any image basename
                     if mask_basename in img_basenames:
                         self.mask_paths.append(mask_path)
-                    # Example alternative: If masks have suffixes like _mask
-                    # elif mask_basename.endswith("_mask") and mask_basename[:-5] in img_basenames:
-                    #     self.mask_paths.append(mask_path)
 
                 if len(self.mask_paths) == len(self.image_paths):
                     self.has_masks = True
                     logging.info(f"Found matching masks for all {len(self.image_paths)} images in {mask_dir}")
                 elif self.mask_paths:
                     logging.warning(f"Found {len(self.mask_paths)} masks in {mask_dir}, but expected {len(self.image_paths)}. Check naming.")
-                    # Decide behavior: error, proceed without masks, or partial masks?
-                    # For now, proceed but self.has_masks remains False unless count matches.
                     self.has_masks = False # Force False if counts don't match
                     self.mask_paths = [] # Clear partial masks to avoid errors in __getitem__
                 else:

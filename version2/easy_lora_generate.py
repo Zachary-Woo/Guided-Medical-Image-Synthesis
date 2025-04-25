@@ -120,7 +120,6 @@ def main():
     # --- Configuration ---
     seed = 123 # Define the seed here
     condition_image_path = Path("data") / "pathmnist_samples" / "sample_0000.png"
-    #lora_path = Path("version2") / "models" / "lora" / "medical_lora.safetensors" # Old (Non-trained model)
     lora_path = Path("version2") / "models" / "lora_histopathology" / "adapter_model.safetensors" # Custom Trained model
     base_output_dir = Path("output")
     output_dir = base_output_dir / f"lora_test_{seed}" # Create seed-specific path

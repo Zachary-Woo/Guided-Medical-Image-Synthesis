@@ -507,13 +507,8 @@ def setup_multicontrolnet_pipeline(args):
                      pipeline.fuse_lora(lora_scale=args.lora_scale)
                      logger.info(f"LoRA adapter '{os.path.basename(lora_file_path)}' fused with scale {args.lora_scale}")
                 except AttributeError:
-                     # Newer diffusers might use set_adapters for scaling
-                     # pipeline.unet.set_adapters(["default"], adapter_weights=[args.lora_scale])
-                     # pipeline.set_adapters(["default"], adapter_weights={"default": args.lora_scale}) # Check correct syntax
                      logger.warning("pipeline.fuse_lora() not available. LoRA scale might not be applied directly during fusion.")
                      logger.info("You might need to adjust scaling during inference if using set_adapters.")
-                     # For simplicity, we'll rely on the loading itself and log a warning.
-                     # If scaling issues arise, revisit diffusers docs for the specific version.
                 except Exception as fuse_error:
                     logger.error(f"Error during LoRA fusion: {fuse_error}")
                     logger.warning("Proceeding with potentially unscaled LoRA weights.")
@@ -559,7 +554,6 @@ def setup_multicontrolnet_pipeline(args):
             logger.warning(f"Could not enable xFormers: {type(e).__name__} - {e}")
             logger.info("Continuing without xFormers optimization. This is often due to version incompatibility.")
             logger.info("Check xformers documentation for compatibility with your PyTorch/CUDA version or reinstall if necessary.")
-            # Example: pip uninstall xformers && pip install xformers
     else:
         # Only if CUDA not available
         pipeline.enable_model_cpu_offload()

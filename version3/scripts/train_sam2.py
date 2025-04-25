@@ -6,7 +6,6 @@ import sys
 import time
 import logging
 import argparse
-import json
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -26,23 +25,17 @@ logger = logging.getLogger(__name__)
 # Try to import SAM2 from GitHub repository first
 SAM2_SOURCE = None
 try:
-    import segment_anything_2
-    from segment_anything_2.build_sam2 import sam2_model_registry
-    from segment_anything_2.modeling import Sam2MaskDecoder
     SAM2_SOURCE = "GITHUB_SAM2"
     logger.info("Using SAM2 from GitHub repository (segment-anything-2)")
 except ImportError:
     try:
         # Try original SAM from GitHub
         import segment_anything
-        from segment_anything import sam_model_registry
-        from segment_anything.modeling import MaskDecoder
         SAM2_SOURCE = "GITHUB_SAM"
         logger.info("Using original SAM from GitHub repository (segment-anything)")
     except ImportError:
         # Fall back to transformers
         try:
-            from transformers import Sam2Model, Sam2Processor, SamModel, SamProcessor
             SAM2_SOURCE = "HUGGINGFACE"
             logger.info("Using SAM/SAM2 from HuggingFace transformers")
         except ImportError:
@@ -51,12 +44,6 @@ except ImportError:
 
 # Add parent directory to path for importing local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.mri_utils import (
-    load_nifti,
-    normalize_intensity,
-    extract_slice,
-    apply_brain_mask
-)
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -286,8 +273,7 @@ def load_sam_model(args):
             try:
                 import segment_anything_2
                 logger.info("Attempting to load checkpoint as segment_anything_2 model...")
-                # Assuming default vit_l for checkpoint loading if config missing
-                model = segment_anything_2.build_sam2_vit_l() # Add configuration loading if needed
+                model = segment_anything_2.build_sam2_vit_l()
                 model.load_state_dict(model_dict, strict=False)
                 # SAM2 doesn't have a separate processor, handled by model interaction
                 processor = None
@@ -298,10 +284,8 @@ def load_sam_model(args):
                 try:
                     import segment_anything
                     logger.info("Attempting to load checkpoint as segment_anything model...")
-                    # Assuming default vit_h for checkpoint loading
                     model = segment_anything.sam_model_registry["vit_h"]()
                     model.load_state_dict(model_dict, strict=False)
-                    # Original SAM uses SamPredictor
                     from segment_anything import SamPredictor
                     processor = SamPredictor(model)
                     logger.info("Successfully loaded checkpoint as SAM model.")
@@ -319,7 +303,6 @@ def load_sam_model(args):
             # Try SAM2 first
             import segment_anything_2
             logger.info("Loading default SAM2 ViT-L model from local installation.")
-            # Add configuration loading logic if needed based on args.sam_config
             model = segment_anything_2.build_sam2_vit_l()
             processor = None
             logger.info("Successfully loaded local SAM2 model.")
@@ -705,15 +688,10 @@ def train(model, processor, train_loader, val_loader, optimizer, scheduler, args
         # Backward pass with gradient scaling if using mixed precision
         if scaler:
             scaler.scale(loss).backward()
-            # Optional: Gradient clipping
-            # scaler.unscale_(optimizer)
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
         else:
             loss.backward()
-            # Optional: Gradient clipping
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
         
         # Update scheduler if using

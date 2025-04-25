@@ -5,7 +5,6 @@ Setup Output Directory Script
 This script ensures that the output directory structure is correctly set up.
 """
 
-import os
 import sys
 import logging
 import argparse

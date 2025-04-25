@@ -1,6 +1,6 @@
 # Medical Image Synthesis Version 3 - Anatomically Accurate Brain MRI Generation
 
-This directory contains the implementation of a specialized medical image synthesis system focused on generating anatomically accurate brain MRI images with tumors in specific locations. This implementation builds upon the research outlined in `v3_outline.md` and addresses the limitations of previous versions.
+This directory contains the implementation of a specialized medical image synthesis system focused on generating anatomically accurate brain MRI images with tumors in specific locations.
 
 ## Key Features
 

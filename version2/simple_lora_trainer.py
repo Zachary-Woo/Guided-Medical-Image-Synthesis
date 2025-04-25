@@ -7,7 +7,6 @@ from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
-from transformers import CLIPTextModel, CLIPTokenizer, CLIPProcessor
 import logging
 
 # Configure logging
@@ -124,8 +123,6 @@ class SimpleCrossAttention(torch.nn.Module):
         k = k + (x @ self.lora_k_A) @ self.lora_k_B * self.lora_scale
         v = v + (x @ self.lora_v_A) @ self.lora_v_B * self.lora_scale
         
-        # Rest of attention calculation would go here
-        # For simplicity, we'll just return the sum of q, k, v
         return self.to_out(q + k + v)
 
 def train_simple_lora(args):

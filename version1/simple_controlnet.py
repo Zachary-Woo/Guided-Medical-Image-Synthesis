@@ -3,7 +3,6 @@
 Enhanced ControlNet generation script optimized for MedMNIST images
 """
 
-import os
 import sys
 import torch
 import argparse
@@ -64,8 +63,6 @@ def create_canny_edge_from_medical_image(image_path, low_threshold=50, high_thre
     original_image = Image.open(image_path).convert("RGB")
     original_np = np.array(original_image)
     
-    # Resize to target size with proper interpolation
-    # For small images like MedMNIST, INTER_LANCZOS4 provides better quality upscaling
     if original_np.shape[0] < target_size or original_np.shape[1] < target_size:
         # First upscale with better algorithm for small images
         resized_np = cv2.resize(original_np, (target_size, target_size), 
@@ -79,8 +76,6 @@ def create_canny_edge_from_medical_image(image_path, low_threshold=50, high_thre
     else:
         gray_np = resized_np
     
-    # IMPROVED: Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-    # This dramatically improves feature extraction in medical images
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     equalized = clahe.apply(gray_np)
     
@@ -257,7 +252,6 @@ def main():
     logger.info(f"Logging to {log_file}")
     
     # Enhance the prompt with medical specific details
-    # IMPROVED: Use histopathology-specific enhancements
     prompt = enhance_medical_prompt(args.prompt, "histopathology")
     logger.info(f"Using enhanced prompt: {prompt}")
     
@@ -291,8 +285,6 @@ def main():
         else:
             generator = None
         
-        # IMPROVED: Increase controlnet_conditioning_scale for stronger structural guidance
-        # The default is now 0.8, but can be overridden by command line args
         controlnet_scale = args.controlnet_conditioning_scale
         
         # Use optimized parameters for medical images

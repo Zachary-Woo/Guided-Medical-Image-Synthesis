@@ -32,7 +32,6 @@ class MedicalImageTransforms:
         
         if normalize:
             # Standard normalization for many datasets
-            # Note: MedMNIST normalization might differ, handled in evaluate.py
             transform_list.append(T.Normalize([0.5] * 3, [0.5] * 3)) # Assume 3 channels for general use
             
         return T.Compose(transform_list)
@@ -88,7 +87,6 @@ def tensor_to_pil(tensor):
     img_np = tensor.permute(1, 2, 0).numpy()
 
     # Convert single-channel grayscale to RGB if needed for saving/display
-    # (Can be adapted based on expected output needs)
     if img_np.shape[2] == 1:
          img_np = np.tile(img_np, (1, 1, 3))
 

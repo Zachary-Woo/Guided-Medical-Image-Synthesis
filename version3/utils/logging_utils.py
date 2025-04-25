@@ -272,7 +272,6 @@ class Logger:
         self, 
         model: torch.nn.Module, 
         input_size: Optional[Tuple[int, ...]] = None,
-        name: str = "model"
     ):
         """
         Log model architecture.

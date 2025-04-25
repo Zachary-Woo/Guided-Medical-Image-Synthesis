@@ -19,11 +19,11 @@ class StainNormalizer:
         self.target_means = None
         self.target_stds = None
         
-    def fit(self, target_image):
+    def fit(self):
         """Fit normalizer to a target image"""
         raise NotImplementedError("Subclasses must implement fit method")
     
-    def transform(self, source_image):
+    def transform(self):
         """Transform source image to match target image staining"""
         raise NotImplementedError("Subclasses must implement transform method")
     
@@ -307,8 +307,6 @@ def normalize_histopathology_image(image, reference_image=None, method='macenko'
     # If no reference is provided, use a default H&E reference
     if reference_image is None:
         # Create a synthetic H&E reference (simplified approach)
-        # In practice, you should use a real reference image from your dataset
-        # logger.warning("No reference image provided. Using synthetic reference.") # Warning moved to calling function
         reference = np.zeros((100, 100, 3), dtype=np.uint8)
         # H&E typical colors (simplified)
         reference[:50, :, 0] = 150  # Hematoxylin - purple/blue (more R and B)

@@ -1,93 +1,113 @@
-# Guided Medical Image Synthesis Using ControlNet for Data Augmentation
+# Guided Medical Image Synthesis Using Diffusion Models
 
-## Overview
-This repository implements a pipeline for synthesizing 2D medical images using ControlNet, a diffusion-based generative model. The primary goal is to explore the potential of using synthetic images, guided by structural information (like segmentation maps or edge maps), to augment medical datasets. This implementation focuses on showing the end-to-end workflow and evaluating the feasibility of this approach for downstream tasks like classification or segmentation, particularly addressing data scarcity challenges in medical imaging.
+## Project Overview
+This repository implements a progressive approach to medical image synthesis using diffusion models with increasingly sophisticated conditioning and control mechanisms. The project evolved through three versions, each addressing specific limitations and exploring different aspects of medical image generation:
 
-## Project Organization
+1. **Version 1**: Basic implementation with pre-trained ControlNet models and simple edge detection for conditioning
+2. **Version 2**: Enhanced framework with stain normalization, LoRA fine-tuning, and improved edge detection for histopathology images
+3. **Version 3**: Comprehensive framework for anatomically accurate brain MRI synthesis with precise tumor placement control using segmentation masks
 
-The project is organized into two versions:
+The work demonstrates the feasibility of generating anatomically accurate medical images with controllable pathological features, focusing particularly on brain MRI synthesis with precise tumor localization in the final version.
 
-- **Version 1**: Initial implementation with basic ControlNet image generation
-- **Version 2**: Enhanced implementation with stain normalization, LoRA fine-tuning support, and advanced techniques
+## Key Features Across Versions
 
-## Version 1 Features
+### Version 1 (Initial Implementation)
+- Basic ControlNet integration for medical image synthesis
+- Canny edge detection for structure conditioning
+- Simple parameter control for generation
+- Tested on PathMNIST histopathology data
 
-The first implementation (`version1/`) focuses on basic image generation using ControlNet:
+### Version 2 (Enhanced Histopathology Implementation)
+- Advanced histopathology stain normalization (Macenko and Reinhard methods)
+- LoRA fine-tuning for domain adaptation
+- Multi-technique edge extraction (Canny, Sobel, adaptive thresholding)
+- Medical-specific prompt engineering
+- Support for multiple diffusion schedulers
 
-- Direct usage of pre-trained ControlNet models
-- Basic edge detection for conditioning
-- Standard medical prompts
-- Simple parameter control
-
-## Version 2 Features
-
-The enhanced implementation (`version2/`) includes:
-
-- Advanced histopathology stain normalization (Macenko and Reinhard)
-- LoRA fine-tuning capability for domain adaptation
-- Multi-technique edge extraction combining Canny, Sobel, and adaptive thresholding
-- Medical-specific prompt engineering for different modalities
-- Support for multiple schedulers and customizable parameters
+### Version 3 (Anatomically Controlled Brain MRI Synthesis)
+- Anatomically accurate generation of brain MRIs with tumors in specific locations
+- SAM2 integration for creating and refining segmentation masks
+- BraTS dataset support for training and evaluation
+- Prompt-based control of tumor location and characteristics
+- Modular architecture separating domain adaptation, structural guidance, and segmentation
+- Visualization tools to compare synthetic images with real medical data
 
 ## Project Structure
 ```
-├── version1/              # Initial implementation
-│   ├── simple_controlnet.py  # Main generation script for v1
-│   ├── generate.py        # Basic text-to-image generation
-│   ├── main.py            # CLI for the full pipeline
-│   ├── test_pipeline.py   # Tests core functionality
-│   └── README.md          # Version 1 documentation
-│
-├── version2/              # Enhanced implementation
-│   ├── scripts/           # Enhanced scripts
-│   │   ├── enhanced_controlnet_v2.py   # Advanced generation
-│   │   └── prepare_lora_training.py    # LoRA dataset preparation
-│   ├── utils/             # Utility modules
-│   │   └── stain_normalization.py      # Stain normalization methods
-│   ├── models/            # Directory for LoRA models
-│   ├── data/              # Directory for processed datasets
-│   ├── configs/           # Configuration files
-│   └── README.md          # Version 2 documentation
-│
-├── data/                  # Shared data directory
-│   └── pathmnist_samples  # Sample images for conditioning
-│
-├── output/                # Generated outputs
-├── requirements.txt       # Project dependencies
-└── README.md              # This file
+.
+├── README.md                # This file
+├── data/                    # Shared data directory
+├── output/                  # Generated outputs directory
+├── requirements.txt         # Project dependencies
+├── version1/                # Initial implementation
+│   ├── scripts/             # Basic scripts for ControlNet generation
+│   └── README.md            # Version 1 documentation
+├── version2/                # Enhanced histopathology implementation
+│   ├── scripts/             # Enhanced scripts with stain normalization
+│   ├── models/              # LoRA models for histopathology
+│   └── README.md            # Version 2 documentation
+└── version3/                # Brain MRI synthesis implementation
+    ├── main.py              # Main CLI entry point
+    ├── scripts/             # Scripts for MRI generation and training
+    ├── models/              # LoRA and ControlNet models for MRI
+    └── README.md            # Version 3 documentation
 ```
 
+## Version Evolution and Approach
+This project represents a significant evolution in approach to medical image synthesis:
+
+1. The initial version focused on establishing a basic pipeline using ControlNet with Canny edge detection for conditioning, applied to histopathology images.
+
+2. The second version enhanced the histopathology implementation with specialized techniques including stain normalization and improved edge detection to better capture tissue structures.
+
+3. The third version represented a strategic pivot, motivated by fundamental limitations in achieving precise anatomical control with edge-based conditioning. This version focused on brain MRI synthesis with tumor placement control using segmentation-based conditioning instead of edge detection, integrating SAM2 to generate and refine tumor masks.
+
+This progression demonstrates the challenges and solutions in developing effective medical image synthesis systems with increasing levels of anatomical control.
+
 ## Quick Start
+Each version has its own installation and usage instructions - please refer to the respective README files for detailed guidance.
+
+### General Setup
+```bash
+# Clone the repository
+git clone https://github.com/Zachary-Woo/Guided-Medical-Image-Synthesis.git
+cd Guided-Medical-Image-Synthesis
+
+# Install base requirements
+pip install -r requirements.txt
+```
 
 ### Version 1 (Basic Generation)
-
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Basic Stable Diffusion generation
-python version1/generate.py
-
-# ControlNet generation
+# Basic ControlNet generation
 python version1/simple_controlnet.py --condition_image ./data/pathmnist_samples/sample_0000.png
 ```
 
-### Version 2 (Enhanced Generation)
-
+### Version 2 (Enhanced Histopathology Generation)
 ```bash
 # Enhanced generation with stain normalization
 python version2/scripts/enhanced_controlnet_v2.py --condition_image ./data/pathmnist_samples/sample_0000.png --stain_norm macenko
-
-# Prepare dataset for LoRA training
-python version2/scripts/prepare_lora_training.py --dataset local --local_dataset_path ./my_dataset --stain_norm macenko
 ```
 
-Please refer to the README files in each version directory for detailed usage instructions.
+### Version 3 (Brain MRI with Tumor Generation)
+```bash
+# Generate brain MRI with tumor in specific location
+python version3/main.py generate --prompt "T1 weighted axial brain MRI with tumor in left temporal lobe" --create_mask
+
+# Generate and visualize compared with real data
+python version3/main.py generate --prompt "T1 weighted axial brain MRI with tumor in left temporal lobe" \
+    --output_dir output/version3/generated --visualize \
+    --brats_dir data/BraTS2021_Training_Data/BraTS2021_00000 --compare_modality t1
+```
+
+## Hardware Requirements
+- Python 3.8+
+- CUDA-compatible GPU (for Version 3, at least 24GB VRAM is recommended)
 
 ## References
-1. MedMNIST v2: A Large-Scale Lightweight Benchmark for 2D and 3D Biomedical Image Classification
-2. ControlNet for Conditional Image Generation
-3. Hugging Face Diffusers Library Documentation
-
-## License
-This project is for educational and research purposes.
+1. BraTS Dataset: [Brain Tumor Segmentation Challenge](https://www.med.upenn.edu/cbica/brats2023/)
+2. PathMNIST: [MedMNIST v2](https://medmnist.com/)
+3. SAM2: [Segment Anything 2 by Meta](https://github.com/facebookresearch/segment-anything-2)
+4. Stable Diffusion: [Stability AI](https://stability.ai/stable-diffusion)
+5. ControlNet: [Zhang et al.](https://github.com/lllyasviel/ControlNet)
+6. Diffusers Library: [HuggingFace Diffusers](https://huggingface.co/docs/diffusers/)

@@ -5,11 +5,9 @@ Utilities for creating and loading Diffusers pipelines.
 import torch
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
 import logging
-import os
 import gc
 import traceback
 from huggingface_hub import scan_cache_dir, HfFolder
-from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
 logger = logging.getLogger(__name__)
 

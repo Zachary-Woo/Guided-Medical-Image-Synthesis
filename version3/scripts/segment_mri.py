@@ -78,7 +78,6 @@ def load_sam2_model(model_id=None, sam_checkpoint=None, device="cuda"):
     
     # First try to load SAM2 from GitHub repository
     try:
-        import segment_anything_2
         from segment_anything_2.build_sam2 import sam2_model_registry
         from segment_anything_2.predictor import SamPredictor
         
@@ -102,7 +101,6 @@ def load_sam2_model(model_id=None, sam_checkpoint=None, device="cuda"):
     
     # Next try to load original SAM from GitHub repository
     try:
-        import segment_anything
         from segment_anything import sam_model_registry, SamPredictor
         
         logging.info("Loading SAM from GitHub repository")
@@ -146,7 +144,7 @@ def load_sam2_model(model_id=None, sam_checkpoint=None, device="cuda"):
     return {
         "model": model,
         "processor": processor,
-        "predictor": None,  # No predictor for HuggingFace implementation
+        "predictor": None,
         "supports_text": supports_text,
         "supports_boxes": supports_boxes,
         "model_type": model_type

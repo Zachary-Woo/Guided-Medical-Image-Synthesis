@@ -10,8 +10,8 @@ from monai.networks.nets import UNet
 from monai.losses import DiceLoss
 from monai.metrics import DiceMetric
 from tqdm import tqdm
-import os # Import os for path joining
-import logging # Import logging for logging messages
+import os
+import logging
 
 
 class SegmentationEvaluator:
@@ -240,7 +240,6 @@ class ClassificationEvaluator:
             for batch_idx, batch in enumerate(progress_bar):
                 try: # Add try-except around batch processing
                     images, labels = batch
-                    # <<< Print raw batch content types and label info BEFORE conversion >>>
                     print(f"[DEBUG Batch {batch_idx}] Raw batch: images type={type(images)}, labels type={type(labels)}")
                     if isinstance(labels, torch.Tensor):
                         print(f"[DEBUG Batch {batch_idx}] Labels (before conversion): {labels.shape}, {labels.dtype}, {labels.device}")
@@ -384,8 +383,6 @@ def train_and_evaluate_downstream(
     
     # Initialize evaluator based on task
     if task == "segmentation":
-        if n_channels is None:
-            raise ValueError("n_channels must be provided for segmentation task.")
         print(f"[DEBUG] Initializing SegmentationEvaluator (channels={n_channels})")
         evaluator = SegmentationEvaluator(
             device=device,
@@ -397,8 +394,6 @@ def train_and_evaluate_downstream(
         test_metric_key = "test_dice"
 
     elif task == "classification":
-        if n_classes is None:
-            raise ValueError("n_classes must be provided for classification task.")
         print(f"[DEBUG] Initializing ClassificationEvaluator (classes={n_classes})")
         evaluator = ClassificationEvaluator(
             device=device,

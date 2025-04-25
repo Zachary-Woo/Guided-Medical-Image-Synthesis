@@ -2,7 +2,6 @@
 """
 Simple standalone script to test image generation with diffusers and CUDA
 """
-import os
 import torch
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
 from PIL import Image
@@ -69,7 +68,6 @@ def main():
     
     # Process input image
     print("Processing input image...")
-    # Use Path for better cross-platform compatibility and join paths correctly
     input_image_path = Path("data") / "pathmnist_samples" / "sample_0000.png" 
     # Ensure output directory exists (moved from below)
     output_dir = Path("output")
@@ -83,7 +81,7 @@ def main():
     canny_image = create_canny_edge(input_image)
     
     # Save edge image
-    canny_image.save(output_dir / "canny_edge_simple.png") # Changed filename to avoid conflict
+    canny_image.save(output_dir / "canny_edge_simple.png")
     
     # Generate image
     print("Generating image...")
@@ -102,7 +100,6 @@ def main():
     end_time = time.time()
     
     # Save output
-    # os.makedirs("output", exist_ok=True) # Moved up
     output_path = output_dir / "generated_simple.png"
     image.save(output_path)
     

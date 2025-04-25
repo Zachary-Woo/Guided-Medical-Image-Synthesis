@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 MRI Utility Functions
 This module provides various utility functions for MRI image preprocessing and manipulation.

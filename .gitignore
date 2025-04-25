@@ -165,9 +165,4 @@ version2/version2_commands.md
 
 # Version 3
 version3/models
-version3/v3_outline.md
 version3/test_cuda.py
-
-
-# Base
-ReportInstructions.md

@@ -199,9 +199,6 @@ def parse_args():
     sam_parser.add_argument("--box", type=str,
                          help="Box prompt as 'x1,y1,x2,y2' for box-guided segmentation")
     
-    # Test CUDA command 
-    test_cuda_parser = subparsers.add_parser("test-cuda", help="Test CUDA availability")
-    
     return parser.parse_args()
 
 def build_command(script_name, args_dict):
@@ -309,11 +306,11 @@ def test_cuda():
     print("="*80 + "\n")
     
     if not torch.cuda.is_available():
-        print("❌ CUDA is NOT available")
+        print("CUDA is NOT available")
         print("Please make sure you have a CUDA-capable GPU and proper drivers installed.")
         return False
     
-    print("✅ CUDA is available")
+    print("CUDA is available")
     print(f"    - GPU: {torch.cuda.get_device_name(0)}")
     print(f"    - CUDA version: {torch.version.cuda}")
     print(f"    - Total memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
@@ -325,9 +322,9 @@ def test_cuda():
         y = torch.matmul(x, x)
         del x, y
         torch.cuda.empty_cache()
-        print("✅ Tensor operation successful")
+        print("Tensor operation successful")
     except Exception as e:
-        print(f"❌ Error during tensor operation: {e}")
+        print(f"Error during tensor operation: {e}")
         return False
     
     return True

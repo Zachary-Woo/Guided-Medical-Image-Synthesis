@@ -4,7 +4,6 @@ Stain Normalization Testing Script - Tests different normalization methods
 on histopathology images and generates comparison visualizations.
 """
 
-import os
 import sys
 import argparse
 import numpy as np
@@ -29,8 +28,6 @@ if parent_dir not in sys.path:
 try:
     from version2.utils.stain_normalization import (
         normalize_histopathology_image,
-        MacenkoNormalizer,
-        ReinhardNormalizer,
         visualize_normalization
     )
 except ImportError:

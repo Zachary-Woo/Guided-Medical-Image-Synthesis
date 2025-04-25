@@ -222,14 +222,8 @@ def create_tumor_mask(prompt, image_size=512):
     # Draw tumor as white circle (you could use more complex shapes here)
     draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill=255)
     
-    # Optional: add some noise/irregularity to the tumor edge 
-    # to make it look more realistic
     mask_np = np.array(mask)
     mask_np = cv2.GaussianBlur(mask_np, (15, 15), 5)
-    
-    # Optional: Add some random variations
-    # noise = np.random.normal(0, 10, mask_np.shape).astype(np.uint8)
-    # mask_np = np.clip(mask_np + noise, 0, 255)
     
     return Image.fromarray(mask_np)
 

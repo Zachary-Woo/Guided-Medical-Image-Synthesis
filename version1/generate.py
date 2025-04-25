@@ -3,12 +3,10 @@
 Simple text-to-image generation script as a fallback
 """
 
-import os
 import sys
 import torch
 import argparse
 import logging
-from PIL import Image
 import traceback
 from pathlib import Path
 import json

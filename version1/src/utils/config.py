@@ -46,17 +46,12 @@ class TrainingConfig:
     Training configuration (primarily for downstream evaluation now).
     """
     output_dir: str = "output"
-    # learning_rate: float = 1e-5 # For ControlNet fine-tuning (unused)
-    downstream_learning_rate: float = 1e-4 # LR for downstream task model
-    # num_epochs: int = 100 # For ControlNet fine-tuning (unused)
-    downstream_num_epochs: int = 20 # Default epochs for downstream task
-    # save_steps: int = 500 # For ControlNet fine-tuning (unused)
-    # eval_steps: int = 100 # For ControlNet fine-tuning (unused)
-    # gradient_accumulation_steps: int = 1 # For ControlNet fine-tuning (unused)
+    downstream_learning_rate: float = 1e-4
+    downstream_num_epochs: int = 20
     seed: int = 42
-    log_wandb: bool = False # For downstream task? Or remove?
-    wandb_project: str = "medical-controlnet" # Maybe rename to downstream_wandb_project?
-    wandb_run_name: Optional[str] = None # Maybe rename to downstream_wandb_run_name?
+    log_wandb: bool = False
+    wandb_project: str = "medical-controlnet"
+    wandb_run_name: Optional[str] = None
 
 
 @dataclass

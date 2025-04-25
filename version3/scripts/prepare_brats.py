@@ -81,11 +81,7 @@ def find_brats_patients(brats_path):
     # Make sure we have directories with expected files
     valid_patients = []
     for patient_dir in patient_dirs:
-        # Check for presence of image files (different naming conventions by year)
-        # Look for either .nii or .nii.gz extension
         has_t1 = any(patient_dir.glob("*t1.nii*")) or any(patient_dir.glob("*T1.nii*"))
-        # BraTS-Reg dataset doesn't have seg files, only check for modality files
-        # has_seg = any(patient_dir.glob("*seg.nii*")) or any(patient_dir.glob("*_seg.nii*"))
         
         # Only check if at least one T1 file exists for now
         if has_t1: # Removed 'and has_seg'
@@ -479,8 +475,6 @@ def main():
         avg_slices_per_patient = 120  # Rough estimate based on typical MRI volumes
         
         if args.sample_count < num_patients * avg_slices_per_patient:
-            # If we want fewer slices than available, sample patients
-            # This assumes we'll get about avg_slices_per_patient from each patient
             patients_needed = max(3, args.sample_count // avg_slices_per_patient)
             if patients_needed < num_patients:
                 logger.info(f"Randomly sampling {patients_needed} patients from {num_patients}")

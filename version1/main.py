@@ -8,7 +8,7 @@ import os
 import argparse
 import subprocess
 import sys
-import shlex # Import shlex for safer command splitting
+import shlex
 
 
 def parse_args():
@@ -28,7 +28,6 @@ def parse_args():
     train_parser = subparsers.add_parser("train", help="Train ControlNet model (Currently less relevant)")
     train_parser.add_argument("--config", type=str, default="version1/configs/default_config.yaml", 
                              help="Path to configuration file")
-    # Add any other train-specific args if needed, mirroring train.py
     train_parser.add_argument("--output_dir", type=str, help="Override output directory in config")
     train_parser.add_argument("--learning_rate", type=float, help="Override learning rate in config")
     train_parser.add_argument("--num_epochs", type=int, help="Override num epochs in config")
@@ -38,9 +37,6 @@ def parse_args():
     generate_parser = subparsers.add_parser("generate", help="Generate medical images using a pre-trained ControlNet")
     generate_parser.add_argument("--config", type=str, default="version1/configs/default_config.yaml", 
                                help="Path to configuration file")
-    # Removed checkpoint, uses config now
-    # generate_parser.add_argument("--checkpoint", type=str, required=True, 
-    #                            help="Path to ControlNet checkpoint")
     generate_parser.add_argument("--conditioning_source_images", type=str, nargs="+", default=[],
                                help="Paths to source images for conditioning (e.g., masks, real images)")
     generate_parser.add_argument("--prompts", type=str, nargs="+", default=[],
@@ -58,11 +54,11 @@ def parse_args():
                                help="Path to config file (specifies dataset name, etc.)")
     evaluate_parser.add_argument("--synthetic_data_dir", type=str, required=True,
                                help="Directory containing the generated synthetic images")
-    evaluate_parser.add_argument("--output_dir", type=str, # Default now comes from config/logic in evaluate.py
+    evaluate_parser.add_argument("--output_dir", type=str,
                                help="Directory to save evaluation results (plots, logs, models)")
-    evaluate_parser.add_argument("--medmnist_download_dir", type=str, # Added arg to specify download location
+    evaluate_parser.add_argument("--medmnist_download_dir", type=str,
                                help="Root directory to download MedMNIST data (overrides default ./data in evaluate.py)")
-    evaluate_parser.add_argument("--task", type=str, # Default in evaluate.py
+    evaluate_parser.add_argument("--task", type=str,
                                choices=["segmentation", "classification"],
                                help="Downstream task to evaluate (overrides config/default)")
     evaluate_parser.add_argument("--batch_size", type=int, help="Override evaluation batch size")
@@ -92,10 +88,6 @@ def parse_args():
     test_parser.add_argument("--verbose", action="store_true",
                            help="Enable verbose logging")
     
-    # Setup command
-    setup_parser = subparsers.add_parser("setup", help="Install requirements (optional)")
-    # No arguments needed for setup usually
-    
     return parser.parse_args()
 
 
@@ -103,7 +95,7 @@ def build_command(script_name: str, args_dict: dict) -> list:
     """Builds a command list for subprocess, handling None values and lists."""
     cmd = [sys.executable, script_name]
     for key, value in args_dict.items():
-        if value is None: # Skip None values
+        if value is None:
             continue
         # Keep underscores for argument names to match argparse definitions
         arg_name = "--" + key
@@ -111,7 +103,7 @@ def build_command(script_name: str, args_dict: dict) -> list:
             if value:
                 cmd.append(arg_name)
         elif isinstance(value, list):
-            if value: # Only add if list is not empty
+            if value:
                 cmd.append(arg_name)
                 cmd.extend(map(str, value))
         else:
@@ -171,7 +163,6 @@ def run_evaluate(args):
         args (argparse.Namespace): Parsed arguments
     """
     args_dict = {
-        # Pass only the relevant args to evaluate.py
         "config": args.config,
         "synthetic_data_dir": args.synthetic_data_dir,
         "output_dir": args.output_dir,

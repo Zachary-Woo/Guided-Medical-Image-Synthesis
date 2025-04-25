@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 Train a ControlNet model for MRI brain tumor generation.
 This script trains a ControlNet conditioned on segmentation masks to generate realistic MRI brain images with tumors.
@@ -46,8 +43,6 @@ import nibabel as nib
 
 from utils.mri_utils import normalize_intensity, extract_brain, mri_to_pil
 
-from datasets import load_dataset
-
 # Will error if the minimal version of diffusers is not installed
 check_min_version("0.21.0")
 
@@ -62,7 +57,6 @@ class BraTSControlNetDataset(Dataset):
         data_root,
         tokenizer,
         size=512,
-        preprocessing_num_workers=8,
         prompt_prefix="MRI scan of brain with ",
         center_crop=True,
         use_augmentation=False,
